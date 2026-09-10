@@ -52,8 +52,3 @@ A senha original não é gravada. O app salva um hash, que é um valor calculado
 
 Os números de economia, os status dos pivôs e as barras dos relatórios estão definidos no código. Eles ainda não vêm de sensores ou equipamentos. A próxima etapa é conectar essas informações e colocar as contas em um servidor, caso o grupo queira acessá-las em vários aparelhos. A recuperação de senha ainda não está disponível.
 
-## Como compartilhar com o grupo
-
-Envie as pastas `lib`, `assets`, `web`, `android` e `ios`, junto com `pubspec.yaml`, `pubspec.lock`, `analysis_options.yaml`, `.metadata`, `.gitignore` e este README. As pastas `build` e `.dart_tool` são geradas pelo Flutter e não precisam ser enviadas.
-
-Depois de mudar o código, salve o arquivo e pressione `r` no terminal. Use `R` para reiniciar o app e `q` para encerrar.
