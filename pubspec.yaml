@@ -1,0 +1,23 @@
+name: ghydro
+description: "Ghydro — aplicativo Flutter."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  cryptography: ^2.9.0
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.5.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/image.png
