@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 // Retorna uma mensagem quando o campo precisa ser corrigido.
 // null indica que o campo pode ser aceito.
 String? validateEmail(String? value) {
@@ -20,6 +22,9 @@ String? validateName(String? value) {
 String? validateNewPassword(String? value) {
   if (value == null || value.length < 8) {
     return 'Use pelo menos 8 caracteres.';
+  }
+  if (utf8.encode(value).length > 72) {
+    return 'A senha é muito longa (máximo de 72 bytes).';
   }
   return null;
 }

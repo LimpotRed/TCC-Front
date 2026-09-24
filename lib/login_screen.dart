@@ -85,15 +85,18 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute<void>(
             builder: (_) => DashboardScreen(
+              auth: _auth,
               name: name,
               email: _email.text.trim().toLowerCase(),
-              onLogout: (dashboardContext) => Navigator.of(dashboardContext)
-                  .pushAndRemoveUntil(
-                    MaterialPageRoute<void>(
-                      builder: (_) => LoginScreen(auth: _auth),
-                    ),
-                    (_) => false,
+              onLogout: (dashboardContext) {
+                _auth.signOut();
+                Navigator.of(dashboardContext).pushAndRemoveUntil(
+                  MaterialPageRoute<void>(
+                    builder: (_) => LoginScreen(auth: _auth),
                   ),
+                  (_) => false,
+                );
+              },
             ),
           ),
           (_) => false,
@@ -109,13 +112,15 @@ class _LoginScreenState extends State<LoginScreen> {
         _changeMode(_AuthMode.login);
         setState(() => _notice = 'Conta criada! Entre com seu e-mail e senha.');
       }
-    } on AuthFailure catch (error) {
+    } on ApiFailure catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(
-          () => _error = 'Não foi possível acessar as contas salvas. Verifique se o navegador permite armazenar dados e tente novamente.',
+          () =>
+              _error = 'Não foi possível acessar o servidor. Tente novamente.',
         );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -172,8 +177,9 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
       validator: (value) {
-        if (confirmation)
+        if (confirmation) {
           return value == _password.text ? null : 'As senhas não coincidem.';
+        }
         return _isLogin
             ? (value == null || value.isEmpty ? 'Informe sua senha.' : null)
             : validateNewPassword(value);
@@ -185,144 +191,151 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final title = _isLogin ? 'Bem-vindo de volta!' : 'Crie sua conta';
     final action = _isLogin ? 'Entrar' : 'Criar conta';
-    return Scaffold(
-      backgroundColor: splashBackground,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                children: [
-                  const GhydroLogo(),
-                  const SizedBox(height: 28),
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: AutofillGroup(
-                      child: Form(
-                        key: _form,
-                        autovalidateMode: AutovalidateMode.onUserInteraction,
-                        child: AbsorbPointer(
-                          absorbing: _busy,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                title,
-                                style: const TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w700,
-                                  color: brandColor,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _isLogin
-                                    ? 'Entre com seu e-mail e senha.'
-                                    : 'Preencha seus dados para começar.',
-                              ),
-                              const SizedBox(height: 24),
-                              if (_error != null || _notice != null) ...[
-                                Semantics(
-                                  liveRegion: true,
-                                  child: Text(
-                                    _error ?? _notice!,
-                                    style: TextStyle(
-                                      color: _error != null
-                                          ? Colors.red.shade800
-                                          : Colors.green.shade800,
-                                    ),
+    return Theme(
+      data: ThemeData.light(useMaterial3: true)
+          .copyWith(colorScheme: ColorScheme.fromSeed(seedColor: brandColor)),
+      child: Scaffold(
+        backgroundColor: splashBackground,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  children: [
+                    const GhydroLogo(),
+                    const SizedBox(height: 28),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: AutofillGroup(
+                        child: Form(
+                          key: _form,
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          child: AbsorbPointer(
+                            absorbing: _busy,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  title,
+                                  style: const TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w700,
+                                    color: brandColor,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
-                              ],
-                              if (_isRegister) ...[
-                                TextFormField(
-                                  key: const ValueKey('name'),
-                                  controller: _name,
-                                  textCapitalization: TextCapitalization.words,
-                                  textInputAction: TextInputAction.next,
-                                  autofillHints: const [AutofillHints.name],
-                                  decoration: _decoration(
-                                    'Nome',
-                                    Icons.person_outline,
-                                  ),
-                                  validator: validateName,
+                                const SizedBox(height: 8),
+                                Text(
+                                  _isLogin
+                                      ? 'Entre com seu e-mail e senha.'
+                                      : 'Preencha seus dados para começar.',
                                 ),
-                                const SizedBox(height: 16),
-                              ],
-                              TextFormField(
-                                key: const ValueKey('email'),
-                                controller: _email,
-                                keyboardType: TextInputType.emailAddress,
-                                textInputAction: TextInputAction.next,
-                                autocorrect: false,
-                                autofillHints: const [AutofillHints.email],
-                                decoration: _decoration(
-                                  'E-mail',
-                                  Icons.mail_outline,
-                                ),
-                                validator: validateEmail,
-                              ),
-                              const SizedBox(height: 16),
-                              _passwordField(),
-                              if (!_isLogin) ...[
-                                const SizedBox(height: 16),
-                                _passwordField(confirmation: true),
-                              ],
-                              const SizedBox(height: 24),
-                              FilledButton(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: brandColor,
-                                  minimumSize: const Size.fromHeight(52),
-                                ),
-                                onPressed: _busy ? null : _submit,
-                                child: _busy
-                                    ? const SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          semanticsLabel: 'Aguarde',
-                                        ),
-                                      )
-                                    : Text(action),
-                              ),
-                              if (_isLogin) ...[
-                                const SizedBox(height: 16),
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    const Text('Não possui conta?'),
-                                    TextButton(
-                                      onPressed: () =>
-                                          _changeMode(_AuthMode.register),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: brandColor,
+                                const SizedBox(height: 24),
+                                if (_error != null || _notice != null) ...[
+                                  Semantics(
+                                    liveRegion: true,
+                                    child: Text(
+                                      _error ?? _notice!,
+                                      style: TextStyle(
+                                        color: _error != null
+                                            ? Colors.red.shade800
+                                            : Colors.green.shade800,
                                       ),
-                                      child: const Text('Crie agora'),
                                     ),
-                                  ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                                if (_isRegister) ...[
+                                  TextFormField(
+                                    key: const ValueKey('name'),
+                                    controller: _name,
+                                    textCapitalization:
+                                        TextCapitalization.words,
+                                    textInputAction: TextInputAction.next,
+                                    autofillHints: const [AutofillHints.name],
+                                    decoration: _decoration(
+                                      'Nome',
+                                      Icons.person_outline,
+                                    ),
+                                    validator: validateName,
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                                TextFormField(
+                                  key: const ValueKey('email'),
+                                  controller: _email,
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  autocorrect: false,
+                                  autofillHints: const [AutofillHints.email],
+                                  decoration: _decoration(
+                                    'E-mail',
+                                    Icons.mail_outline,
+                                  ),
+                                  validator: validateEmail,
                                 ),
+                                const SizedBox(height: 16),
+                                _passwordField(),
+                                if (!_isLogin) ...[
+                                  const SizedBox(height: 16),
+                                  _passwordField(confirmation: true),
+                                ],
+                                const SizedBox(height: 24),
+                                FilledButton(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: brandColor,
+                                    minimumSize: const Size.fromHeight(52),
+                                  ),
+                                  onPressed: _busy ? null : _submit,
+                                  child: _busy
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            semanticsLabel: 'Aguarde',
+                                          ),
+                                        )
+                                      : Text(action),
+                                ),
+                                if (_isLogin) ...[
+                                  const SizedBox(height: 16),
+                                  Wrap(
+                                    alignment: WrapAlignment.center,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      const Text('Não possui conta?'),
+                                      TextButton(
+                                        onPressed: () =>
+                                            _changeMode(_AuthMode.register),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: brandColor,
+                                        ),
+                                        child: const Text('Crie agora'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                if (!_isLogin)
+                                  TextButton(
+                                    onPressed: () =>
+                                        _changeMode(_AuthMode.login),
+                                    child: const Text('Voltar para o login'),
+                                  ),
                               ],
-                              if (!_isLogin)
-                                TextButton(
-                                  onPressed: () => _changeMode(_AuthMode.login),
-                                  child: const Text('Voltar para o login'),
-                                ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
