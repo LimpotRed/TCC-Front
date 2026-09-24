@@ -1,54 +1,55 @@
-﻿# Ghydro
+# Ghydro — frontend
 
-Aplicativo do nosso TCC para acompanhar pivôs de irrigação e a economia de água. As telas foram feitas em Flutter, usando Dart.
+Aplicativo Flutter conectado ao backend Spring Boot que fica na pasta irmã `TCC-BACKAND`.
 
-## Como abrir o projeto
+As contas e os dados do sistema são persistidos pelo backend no PostgreSQL remoto. O aplicativo não usa banco local, `localStorage` ou dados demonstrativos como alternativa. O token de acesso fica somente na memória; ao recarregar a página, é necessário entrar novamente.
 
-1. Instale o Flutter e abra esta pasta no VS Code.
-2. No terminal da pasta, rode `flutter pub get` para baixar as dependências.
-3. Inicie o app com o comando abaixo:
+## Executar no Windows
 
-```powershell
-flutter run -d web-server --web-hostname localhost --web-port 8080
-```
-
-Abra http://localhost:8080 no navegador e deixe o terminal aberto.
-
-No computador do Lucas, se o comando `flutter` não for encontrado, use:
+1. Inicie o backend:
 
 ```powershell
-& 'C:\flutter\bin\flutter.bat' run -d web-server --web-hostname localhost --web-port 8080
+cd C:\Users\Aluno\Desktop\TCC-BACKAND
+.\start-backend.cmd
 ```
 
-O projeto usa Dart 3.13.2 ou mais recente dentro da versão 3. O Flutter já inclui o Dart.
+2. Em outro terminal, inicie o frontend:
 
-## Como usar
+```powershell
+cd C:\Users\Aluno\Desktop\tcc-front
+.\start-front.cmd
+```
 
-Ao abrir, a logo aparece por 2 segundos. Depois vem o login. Quem ainda não tem conta pode clicar em “Crie agora”, preencher os dados e voltar para entrar.
+3. Abra [http://localhost:8080](http://localhost:8080).
 
-Após entrar, o painel mostra o nome cadastrado, a economia mensal e os pivôs. Toque em um pivô para ver seus detalhes. O menu inferior abre início, pivôs, perfil e relatórios. Para sair, use o perfil ou o menu no canto superior.
+O frontend usa `http://localhost:8081` como API por padrão. Para apontar para uma API hospedada:
 
-## Onde mexer
+```powershell
+.\start-front.cmd -ApiBaseUrl 'https://api.exemplo.com'
+```
 
-| Arquivo | O que ele faz |
-| --- | --- |
-| `lib/main.dart` | Inicia o app e mostra a splash por 2 segundos. |
-| `lib/brand.dart` | Guarda a logo e as cores da splash e do login. |
-| `lib/login_screen.dart` | Monta os campos e botões de login e cadastro. |
-| `lib/auth_validation.dart` | Confere nome, e-mail e tamanho da senha. |
-| `lib/auth_service.dart` | Salva as contas e confere a senha ao entrar. |
-| `lib/dashboard_screen.dart` | Monta o painel, os cartões, o gráfico e a navegação. |
-| `assets/images/image.png` | Logo usada no app. |
-| `web/ghydro-logo.png` | Ícone da aba do navegador. |
-| `pubspec.yaml` | Lista as dependências e as imagens usadas. |
+O mesmo valor pode ser passado diretamente ao Flutter com `--dart-define=API_BASE_URL=...`. No emulador Android, use `http://10.0.2.2:8081` para acessar o backend do computador. Em produção, publique frontend e API com HTTPS e configure a origem do frontend em `CORS_ORIGINS` no backend.
 
-Dentro do painel, `_pivots` guarda os dados dos pivôs. `_economy` mostra o valor da economia. `_reports` monta as barras e `_EconomyRing` desenha o anel colorido.
+## Funcionalidades conectadas
 
-## Como os dados funcionam hoje
+- Cadastro, login, consulta e edição do perfil pela API.
+- Painel com propriedades, dispositivos, sensores e execuções reais.
+- Cadastro, consulta, edição e exclusão dos módulos disponíveis no backend.
+- Pesquisa, filtros de situação, paginação visual, detalhes e confirmação antes de excluir.
+- Seletores de relacionamentos, datas, horários, enumerações e múltiplas estações.
+- Histórico administrativo de manutenções.
+- Relatórios calculados a partir das execuções de manejo retornadas pela API.
 
-O cadastro e o login funcionam com contas salvas no próprio navegador. Cada integrante precisa criar sua conta no computador que usar. Mantenha o mesmo endereço e perfil do navegador; limpar os dados do site apaga as contas.
+Usuários `PRODUTOR` visualizam seus próprios dados e não recebem comandos de alteração. Operações de escrita exigem `ADMIN` ou `TECNICO`. O cadastro público sempre cria um usuário `PRODUTOR`.
 
-A senha original não é gravada. O app salva um hash, que é um valor calculado a partir da senha, e faz a mesma conta para conferir o login. Isso não substitui a proteção de um servidor.
+## Verificação
 
-Os números de economia, os status dos pivôs e as barras dos relatórios estão definidos no código. Eles ainda não vêm de sensores ou equipamentos. A próxima etapa é conectar essas informações e colocar as contas em um servidor, caso o grupo queira acessá-las em vários aparelhos. A recuperação de senha ainda não está disponível.
+```powershell
+flutter analyze
+flutter test
+flutter build web
+```
 
+Os testes usam respostas HTTP simuladas apenas para conferir os contratos e a interface. Não existe alternativa simulada durante a execução normal. A conexão, o contexto JPA e a consulta de autenticação também foram validados no PostgreSQL remoto.
+
+O mapa completo da integração e o roteiro de validação estão em [INTEGRACAO.md](INTEGRACAO.md).
