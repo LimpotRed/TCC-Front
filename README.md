@@ -6,6 +6,22 @@ As contas e os dados do sistema são persistidos pelo backend no PostgreSQL remo
 
 ## Executar no Windows
 
+Para iniciar o backend e o frontend juntos, execute na pasta deste projeto:
+
+```powershell
+.\start-all.cmd
+```
+
+Esse comando abre o backend em uma janela separada e inicia o Flutter em `http://localhost:8080`, usando a API em `http://localhost:8081`.
+
+Para apontar para outra API:
+
+```powershell
+.\start-all.cmd -ApiBaseUrl 'https://api.exemplo.com'
+```
+
+Também é possível iniciar os serviços separadamente:
+
 1. Inicie o backend:
 
 ```powershell

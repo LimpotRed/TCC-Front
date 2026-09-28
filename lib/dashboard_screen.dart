@@ -341,35 +341,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
               : Column(children: [ring, const SizedBox(height: 24), _pivots()]),
         ),
         const SizedBox(height: 24),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _stat(
-              'Propriedades',
-              '${rows('propriedade').length}',
-              Icons.landscape_outlined,
-              'propriedade',
-            ),
-            _stat(
-              'Setores',
-              '${rows('setor').length}',
-              Icons.grid_view,
-              'setor',
-            ),
-            _stat(
-              'Plantios em andamento',
-              '${rows('plantio').where((p) => p['statusPlantio'] == 'EM_ANDAMENTO').length}',
-              Icons.grass,
-              'plantio',
-            ),
-            _stat(
-              'Recomendações pendentes',
-              '${rows('recomendacao').where((r) => r['status'] == 'PENDENTE').length}',
-              Icons.tips_and_updates_outlined,
-              'recomendacao',
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 600;
+            final columns = isMobile
+                ? 2
+                : (constraints.maxWidth / 257).floor().clamp(2, 4);
+            final cardWidth =
+                (constraints.maxWidth - 12 * (columns - 1)) / columns;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _stat(
+                  'Propriedades',
+                  '${rows('propriedade').length}',
+                  Icons.landscape_outlined,
+                  'propriedade',
+                  width: cardWidth,
+                  square: isMobile,
+                ),
+                _stat(
+                  'Setores',
+                  '${rows('setor').length}',
+                  Icons.grid_view,
+                  'setor',
+                  width: cardWidth,
+                  square: isMobile,
+                ),
+                _stat(
+                  'Plantios em andamento',
+                  '${rows('plantio').where((p) => p['statusPlantio'] == 'EM_ANDAMENTO').length}',
+                  Icons.grass,
+                  'plantio',
+                  width: cardWidth,
+                  square: isMobile,
+                ),
+                _stat(
+                  'Recomendações pendentes',
+                  '${rows('recomendacao').where((r) => r['status'] == 'PENDENTE').length}',
+                  Icons.tips_and_updates_outlined,
+                  'recomendacao',
+                  width: cardWidth,
+                  square: isMobile,
+                ),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 24),
         if (rows('propriedade').isEmpty)
@@ -403,35 +421,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _stat(String label, String value, IconData icon, String path) =>
-      SizedBox(
-        width: 245,
-        child: Card(
-          color: _surface,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => _open(resource(path)),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(icon, color: _cyan),
-                  const SizedBox(height: 12),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
+  Widget _stat(
+    String label,
+    String value,
+    IconData icon,
+    String path, {
+    required double width,
+    required bool square,
+  }) {
+    return SizedBox(
+      width: width,
+      height: square ? width : null,
+      child: Card(
+        color: _surface,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _open(resource(path)),
+          child: Padding(
+            padding: EdgeInsets.all(square ? 12 : 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: _cyan, size: square ? 20 : 24),
+                SizedBox(height: square ? 6 : 12),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: square ? 24 : 28,
+                    fontWeight: FontWeight.bold,
                   ),
-                  Text(label, style: const TextStyle(color: _muted)),
-                ],
-              ),
+                ),
+                Text(
+                  label,
+                  maxLines: square ? 2 : null,
+                  overflow: square ? TextOverflow.ellipsis : null,
+                  style: TextStyle(color: _muted, fontSize: square ? 12 : 14),
+                ),
+              ],
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
+
   Widget _pivots() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -453,44 +486,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const SizedBox(height: 14),
       if (rows('dispositivoIrrigacao').isEmpty)
         _card(const Text('Nenhum dispositivo cadastrado para sua conta.')),
-      for (final row in rows('dispositivoIrrigacao').take(4))
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: _card(
-            Row(
-              children: [
-                const Icon(Icons.water_drop_outlined, color: _cyan, size: 30),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        row['nome']?.toString() ?? 'Dispositivo',
-                        style: const TextStyle(fontSize: 18),
-                      ),
-                      Text(
-                        displayValue(row['tipoDispositivo']),
-                        style: const TextStyle(color: _muted),
-                      ),
-                      Text(
-                        'Setor: ${displayValue(row['setor'])}',
-                        style: const TextStyle(color: _muted, fontSize: 12),
-                      ),
-                    ],
-                  ),
+      if (rows('dispositivoIrrigacao').isNotEmpty)
+        LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final row in rows('dispositivoIrrigacao').take(4))
+                SizedBox(
+                  width: (constraints.maxWidth - 12) / 2,
+                  child: AspectRatio(aspectRatio: 1, child: _deviceCard(row)),
                 ),
-                if (row['eficienciaIrrigacao'] is num)
-                  Text(
-                    '${_number(row['eficienciaIrrigacao'] as num)}%',
-                    style: const TextStyle(color: _green),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
     ],
   );
+
+  Widget _deviceCard(Map<String, dynamic> row) => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: _surface,
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: const Color(0xFF393254)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.water_drop_outlined, color: _cyan, size: 22),
+            const Spacer(),
+            if (row['eficienciaIrrigacao'] is num)
+              Text(
+                '${_number(row['eficienciaIrrigacao'] as num)}%',
+                style: const TextStyle(color: _green, fontSize: 12),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          row['nome']?.toString() ?? 'Dispositivo',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        const Spacer(),
+        Text(
+          displayValue(row['tipoDispositivo']),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: _muted, fontSize: 10),
+        ),
+        Text(
+          'Setor: ${displayValue(row['setor'])}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: _muted, fontSize: 10),
+        ),
+      ],
+    ),
+  );
+
   Widget _modules() {
     final available = resources
         .where(
