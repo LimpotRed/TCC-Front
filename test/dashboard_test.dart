@@ -25,10 +25,17 @@ void main() {
                     ? [
                         {
                           'id': 7,
-                          'nome': 'Pivô real',
+                          'nome': 'Pivô Leste',
                           'tipoDispositivo': 'PIVO',
                           'eficienciaIrrigacao': 85,
                           'setor': {'nome': 'Leste'},
+                        },
+                        {
+                          'id': 8,
+                          'nome': 'Pivô Sul',
+                          'tipoDispositivo': 'PIVO',
+                          'eficienciaIrrigacao': 92,
+                          'setor': {'nome': 'Sul'},
                         },
                       ]
                     : [],
@@ -52,8 +59,23 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      await tester.ensureVisible(find.text('Pivô real'));
+      await tester.ensureVisible(find.text('Pivô Leste'));
       expect(find.text('85%'), findsOneWidget);
+      expect(find.text('92%'), findsOneWidget);
+      final leftDevice = tester.getRect(find.text('Pivô Leste'));
+      final rightDevice = tester.getRect(find.text('Pivô Sul'));
+      expect((leftDevice.top - rightDevice.top).abs(), lessThan(1));
+      expect(rightDevice.left, greaterThan(leftDevice.left));
+      if (width == 320) {
+        await tester.ensureVisible(find.text('Setores'));
+        await tester.pumpAndSettle();
+        final properties = tester.getRect(find.text('Propriedades'));
+        final sectors = tester.getRect(find.text('Setores'));
+        final crops = tester.getRect(find.text('Plantios em andamento'));
+        expect((properties.top - sectors.top).abs(), lessThan(1));
+        expect(sectors.left, greaterThan(properties.left));
+        expect(crops.top, greaterThan(properties.bottom));
+      }
       expect(find.text('R\$ 5.643,50'), findsNothing);
       await tester.tap(find.text('Gestão'));
       await tester.pumpAndSettle();
