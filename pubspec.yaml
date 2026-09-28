@@ -7,10 +7,12 @@ environment:
   sdk: ^3.13.2
 
 dependencies:
-  cryptography: ^2.9.0
+  cupertino_icons: ^1.0.8
+  http: ^1.6.0
   flutter:
     sdk: flutter
-  shared_preferences: ^2.5.5
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:
