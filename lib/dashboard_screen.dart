@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import 'auth_service.dart';
+import 'farm_planting_screen.dart';
+import 'open_meteo_service.dart';
 import 'resource_schema.dart';
 import 'resource_screen.dart';
+import 'farm_weather_card.dart';
 
 const _background = Color(0xFF15142F);
 const _surface = Color(0xFF242144);
@@ -19,10 +23,12 @@ class DashboardScreen extends StatefulWidget {
     required this.name,
     required this.email,
     required this.onLogout,
+    this.weatherService,
   });
   final AuthService auth;
   final String name, email;
   final void Function(BuildContext) onLogout;
+  final OpenMeteoService? weatherService;
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
@@ -33,6 +39,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _error;
   final _data = <String, List<Map<String, dynamic>>>{};
   String _moduleSearch = '';
+  String? _selectedFarmId;
+  List<Map<String, dynamic>> _farmSectors = [];
+  bool _farmSectorsBusy = false;
+  String? _farmSectorsError;
+  int _farmSectorsGeneration = 0;
+  int _dataGeneration = 0;
   @override
   void initState() {
     super.initState();
@@ -49,6 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _load() async {
+    final generation = ++_dataGeneration;
     setState(() {
       _busy = true;
       _error = null;
@@ -57,8 +70,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final entries = await Future.wait([
         for (final path in [
           'propriedade',
-          'setor',
-          'plantio',
           'dispositivoIrrigacao',
           'sensor',
           'recomendacao',
@@ -67,27 +78,108 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ])
           widget.auth.api.list(path).then((rows) => MapEntry(path, rows)),
       ]);
-      if (mounted) {
+      if (mounted && generation == _dataGeneration) {
         setState(() {
           _data.clear();
           _data.addEntries(entries);
+          final ids = rows('propriedade')
+              .map((farm) => farm['id']?.toString())
+              .whereType<String>()
+              .toSet();
+          if (!ids.contains(_selectedFarmId)) {
+            _selectedFarmId = ids.isEmpty ? null : ids.first;
+          }
         });
+        unawaited(_loadFarmSectors());
       }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted && generation == _dataGeneration) {
+        setState(() => _error = e.toString());
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && generation == _dataGeneration) {
+        setState(() => _busy = false);
+      }
     }
+  }
+
+  Future<void> _loadFarmSectors() async {
+    final id = _selectedFarmId;
+    final generation = ++_farmSectorsGeneration;
+    if (id == null) {
+      if (mounted) {
+        setState(() {
+          _farmSectors = [];
+          _farmSectorsBusy = false;
+          _farmSectorsError = null;
+        });
+      }
+      return;
+    }
+    setState(() {
+      _farmSectorsBusy = true;
+      _farmSectorsError = null;
+      _farmSectors = [];
+    });
+    try {
+      final sectors = await widget.auth.api.list(
+        'propriedade/${Uri.encodeComponent(id)}/safras/setores',
+      );
+      if (mounted && generation == _farmSectorsGeneration) {
+        setState(() => _farmSectors = sectors);
+      }
+    } catch (error) {
+      if (mounted && generation == _farmSectorsGeneration) {
+        setState(() => _farmSectorsError = error.toString());
+      }
+    } finally {
+      if (mounted && generation == _farmSectorsGeneration) {
+        setState(() => _farmSectorsBusy = false);
+      }
+    }
+  }
+
+  void _selectFarm(String? id) {
+    if (id == _selectedFarmId) return;
+    setState(() => _selectedFarmId = id);
+    _loadFarmSectors();
   }
 
   List<Map<String, dynamic>> rows(String key) => _data[key] ?? [];
   Future<void> _open(ResourceSpec spec) async {
+    if (spec.path == 'plantio') {
+      await _openPlantings();
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ResourceScreen(
           api: widget.auth.api,
           spec: spec,
           canManage: widget.auth.canManage,
+          header: spec.path == 'leituraClimatica'
+              ? FarmWeatherCard(
+                  api: widget.auth.api,
+                  farms: rows('propriedade'),
+                  weatherService: widget.weatherService,
+                  selectedFarmId: _selectedFarmId,
+                  onFarmChanged: _selectFarm,
+                )
+              : null,
+        ),
+      ),
+    );
+    if (mounted && widget.auth.api.token != null) await _load();
+  }
+
+  Future<void> _openPlantings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FarmPlantingScreen(
+          api: widget.auth.api,
+          farms: rows('propriedade'),
+          selectedFarmId: _selectedFarmId,
+          onFarmChanged: _selectFarm,
         ),
       ),
     );
@@ -363,7 +455,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 _stat(
                   'Setores',
-                  '${rows('setor').length}',
+                  _farmSectorsBusy || _farmSectorsError != null
+                      ? '--'
+                      : '${_farmSectors.length}',
                   Icons.grid_view,
                   'setor',
                   width: cardWidth,
@@ -371,7 +465,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 _stat(
                   'Plantios em andamento',
-                  '${rows('plantio').where((p) => p['statusPlantio'] == 'EM_ANDAMENTO').length}',
+                  _farmSectorsBusy || _farmSectorsError != null
+                      ? '--'
+                      : '${_farmSectors.where((s) => s['plantioAtivo'] is Map && (s['plantioAtivo'] as Map)['statusPlantio'] == 'EM_ANDAMENTO').length}',
                   Icons.grass,
                   'plantio',
                   width: cardWidth,
@@ -390,6 +486,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
         ),
         const SizedBox(height: 24),
+        if (_farmSectorsError != null) ...[
+          _card(
+            Semantics(
+              liveRegion: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Não foi possível carregar as safras desta fazenda.',
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _loadFarmSectors,
+                    child: const Text('Tentar novamente'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
         if (rows('propriedade').isEmpty)
           _card(
             Column(
@@ -400,19 +517,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: TextStyle(fontSize: 21, color: Colors.white),
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  widget.auth.canManage
-                      ? 'Cadastre o proprietário, a propriedade e o tipo de solo. Depois crie os setores, plantios e equipamentos.'
-                      : 'Complete seu perfil. A equipe técnica poderá vincular sua propriedade e os equipamentos à sua conta.',
+                const Text(
+                  'As fazendas e estações são cadastradas no aplicativo web. Peça à equipe responsável para vincular sua fazenda à conta e atualize o painel.',
                 ),
                 const SizedBox(height: 12),
                 TextButton.icon(
-                  onPressed: () =>
-                      setState(() => _tab = widget.auth.canManage ? 1 : 2),
+                  onPressed: _load,
                   icon: const Icon(Icons.arrow_forward),
-                  label: Text(
-                    widget.auth.canManage ? 'Abrir gestão' : 'Completar perfil',
-                  ),
+                  label: const Text('Atualizar painel'),
                 ),
               ],
             ),

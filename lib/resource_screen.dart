@@ -5,6 +5,8 @@ import 'resource_schema.dart';
 
 const panelColor = Color(0xFF242144);
 const accentColor = Color(0xFF36C9D8);
+const _readOnlyNotice =
+    'Os cadastros e as alterações são feitos no aplicativo web da equipe responsável. Aqui, você pode consultar os dados.';
 
 class ResourceScreen extends StatefulWidget {
   const ResourceScreen({
@@ -12,10 +14,12 @@ class ResourceScreen extends StatefulWidget {
     required this.api,
     required this.spec,
     required this.canManage,
+    this.header,
   });
   final ApiClient api;
   final ResourceSpec spec;
   final bool canManage;
+  final Widget? header;
   @override
   State<ResourceScreen> createState() => _ResourceScreenState();
 }
@@ -30,10 +34,15 @@ class _ResourceScreenState extends State<ResourceScreen> {
   int _page = 0;
   int _generation = 0;
   static const pageSize = 12;
+
+  bool get _canWrite => widget.canManage && !widget.spec.readOnly;
+  bool get _weatherOnly =>
+      widget.spec.path == 'leituraClimatica' && widget.header != null;
+
   @override
   void initState() {
     super.initState();
-    _load();
+    if (!_weatherOnly) _load();
   }
 
   Future<void> _load() async {
@@ -59,7 +68,8 @@ class _ResourceScreenState extends State<ResourceScreen> {
     }
   }
 
-  Future<void> _edit([Map<String, dynamic>? row]) async {
+  Future<void> _edit(Map<String, dynamic> row) async {
+    if (!_canWrite) return;
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) =>
@@ -68,13 +78,14 @@ class _ResourceScreenState extends State<ResourceScreen> {
     );
     if (changed == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registro salvo no servidor.')),
+        const SnackBar(content: Text('Alterações salvas no servidor.')),
       );
       await _load();
     }
   }
 
   Future<void> _delete(Map<String, dynamic> row) async {
+    if (!_canWrite) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -94,7 +105,7 @@ class _ResourceScreenState extends State<ResourceScreen> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted || !_canWrite) return;
     setState(() => _busy = true);
     try {
       await widget.api.request(
@@ -160,6 +171,20 @@ class _ResourceScreenState extends State<ResourceScreen> {
   @override
   Widget build(BuildContext context) {
     final spec = widget.spec;
+    if (_weatherOnly) {
+      return Scaffold(
+        appBar: AppBar(title: Text(spec.title)),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1100),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+              children: [widget.header!],
+            ),
+          ),
+        ),
+      );
+    }
     final visible = _rows
         .where(
           (row) =>
@@ -189,13 +214,6 @@ class _ResourceScreenState extends State<ResourceScreen> {
           ),
         ],
       ),
-      floatingActionButton: widget.canManage
-          ? FloatingActionButton.extended(
-              onPressed: _busy ? null : () => _edit(),
-              icon: const Icon(Icons.add),
-              label: Text('Novo registro'),
-            )
-          : null,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1100),
@@ -206,14 +224,18 @@ class _ResourceScreenState extends State<ResourceScreen> {
                 spec.description,
                 style: const TextStyle(color: Color(0xFFBDB6D3)),
               ),
-              if (!widget.canManage)
-                const Padding(
-                  padding: EdgeInsets.only(top: 10),
+              if (!_canWrite)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
                   child: Text(
-                    'Consulta dos dados disponíveis para sua conta. Alterações são realizadas pela equipe técnica.',
+                    spec.readOnly ? _readOnlyNotice : 'Consulta dos dados disponíveis para sua conta. Alterações são realizadas pela equipe técnica.',
                   ),
                 ),
               const SizedBox(height: 20),
+              if (widget.header != null) ...[
+                widget.header!,
+                const SizedBox(height: 20),
+              ],
               if (_historyPath != null)
                 TextButton.icon(
                   onPressed: () {
@@ -277,14 +299,6 @@ class _ResourceScreenState extends State<ResourceScreen> {
                             : 'Nenhum resultado para esta busca',
                         textAlign: TextAlign.center,
                       ),
-                      if (_rows.isEmpty && widget.canManage)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: Text(
-                            'Use “Novo registro” para começar.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -316,7 +330,7 @@ class _ResourceScreenState extends State<ResourceScreen> {
                         ),
                       ),
                       onTap: () => _details(row),
-                      trailing: widget.canManage
+                      trailing: _canWrite
                           ? PopupMenuButton<String>(
                               tooltip: 'Ações do registro',
                               onSelected: (action) {
@@ -404,11 +418,11 @@ class ResourceEditor extends StatefulWidget {
     super.key,
     required this.api,
     required this.spec,
-    this.row,
+    required this.row,
   });
   final ApiClient api;
   final ResourceSpec spec;
-  final Map<String, dynamic>? row;
+  final Map<String, dynamic> row;
   @override
   State<ResourceEditor> createState() => _ResourceEditorState();
 }
@@ -423,8 +437,12 @@ class _ResourceEditorState extends State<ResourceEditor> {
   @override
   void initState() {
     super.initState();
+    if (widget.spec.readOnly) {
+      _loading = false;
+      return;
+    }
     for (final field in widget.spec.fields) {
-      final value = widget.row?[field.key];
+      final value = widget.row[field.key];
       if (field.kind == FieldKind.relation) {
         _values[field.key] = value is Map ? value['id'] : null;
       } else if (field.kind == FieldKind.relations) {
@@ -445,6 +463,7 @@ class _ResourceEditorState extends State<ResourceEditor> {
   }
 
   Future<void> _loadLookups() async {
+    if (widget.spec.readOnly) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -506,10 +525,10 @@ class _ResourceEditorState extends State<ResourceEditor> {
   }
 
   Future<void> _save() async {
-    if (_saving || !_form.currentState!.validate()) return;
-    final payload = <String, dynamic>{
-      if (widget.row != null) 'id': widget.row!['id'],
-    };
+    if (widget.spec.readOnly || _saving || !_form.currentState!.validate()) {
+      return;
+    }
+    final payload = <String, dynamic>{'id': widget.row['id']};
     for (final f in widget.spec.fields) {
       final text = _controllers[f.key]?.text.trim() ?? '';
       payload[f.key] = switch (f.kind) {
@@ -531,14 +550,10 @@ class _ResourceEditorState extends State<ResourceEditor> {
     });
     try {
       final spec = widget.spec;
-      final path = widget.row == null || spec.putAtRoot
+      final path = spec.putAtRoot
           ? spec.path
-          : '${spec.path}/${widget.row!['id']}';
-      await widget.api.request(
-        widget.row == null ? 'POST' : 'PUT',
-        path,
-        body: payload,
-      );
+          : '${spec.path}/${widget.row['id']}';
+      await widget.api.request('PUT', path, body: payload);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -612,9 +627,7 @@ class _ResourceEditorState extends State<ResourceEditor> {
             runSpacing: 8,
             children: [
               if (options.isEmpty)
-                const Text(
-                  'Nenhum registro disponível. Cadastre-o na seção correspondente.',
-                ),
+                const Text('Nenhum registro disponível para vincular.'),
               for (final option in options.entries)
                 FilterChip(
                   label: Text(option.value),
@@ -690,85 +703,98 @@ class _ResourceEditorState extends State<ResourceEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_saving,
-    child: Scaffold(
-      appBar: AppBar(
-        title: Text(
-          '${widget.row == null ? 'Cadastrar' : 'Editar'} ${widget.spec.singular.toLowerCase()}',
+  Widget build(BuildContext context) {
+    if (widget.spec.readOnly) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.spec.title)),
+        body: const SafeArea(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(_readOnlyNotice, textAlign: TextAlign.center),
+            ),
+          ),
         ),
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : Form(
-                  key: _form,
-                  child: ListView(
-                    padding: const EdgeInsets.all(24),
-                    children: [
-                      const Text('Campos com * são obrigatórios.'),
-                      const SizedBox(height: 24),
-                      if (_lookups.length <
-                          widget.spec.fields
-                              .map((f) => f.resource)
-                              .whereType<String>()
-                              .toSet()
-                              .length)
-                        ErrorPanel(
-                          message:
-                              _error ??
-                              'Não foi possível carregar os vínculos.',
-                          retry: _loadLookups,
-                        )
-                      else ...[
-                        AbsorbPointer(
-                          absorbing: _saving,
-                          child: Column(
-                            children: [
-                              for (final field in widget.spec.fields)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 20),
-                                  child: _field(field),
-                                ),
-                            ],
+      );
+    }
+    return PopScope(
+      canPop: !_saving,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Editar ${widget.spec.singular.toLowerCase()}'),
+        ),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : Form(
+                    key: _form,
+                    child: ListView(
+                      padding: const EdgeInsets.all(24),
+                      children: [
+                        const Text('Campos com * são obrigatórios.'),
+                        const SizedBox(height: 24),
+                        if (_lookups.length <
+                            widget.spec.fields
+                                .map((f) => f.resource)
+                                .whereType<String>()
+                                .toSet()
+                                .length)
+                          ErrorPanel(
+                            message:
+                                _error ??
+                                'Não foi possível carregar os vínculos.',
+                            retry: _loadLookups,
+                          )
+                        else ...[
+                          AbsorbPointer(
+                            absorbing: _saving,
+                            child: Column(
+                              children: [
+                                for (final field in widget.spec.fields)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 20),
+                                    child: _field(field),
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                        if (_error != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 20),
-                            child: Semantics(
-                              liveRegion: true,
-                              child: Text(
-                                _error!,
-                                style: const TextStyle(
-                                  color: Color(0xFFFFB4AB),
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 20),
+                              child: Semantics(
+                                liveRegion: true,
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(
+                                    color: Color(0xFFFFB4AB),
+                                  ),
                                 ),
                               ),
                             ),
+                          FilledButton.icon(
+                            onPressed: _saving ? null : _save,
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.check),
+                            label: Text(
+                              _saving ? 'Salvando…' : 'Salvar alterações',
+                            ),
                           ),
-                        FilledButton.icon(
-                          onPressed: _saving ? null : _save,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.check),
-                          label: Text(
-                            _saving ? 'Salvando…' : 'Salvar registro',
-                          ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

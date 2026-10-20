@@ -42,13 +42,14 @@ class ResourceSpec {
     this.description,
     this.fields, {
     this.staffOnly = false,
+    this.readOnly = false,
     this.putAtRoot = false,
     this.deleteSlash = true,
   });
   final String path, title, singular, group, description;
   final IconData icon;
   final List<DataField> fields;
-  final bool staffOnly, putAtRoot, deleteSlash;
+  final bool staffOnly, readOnly, putAtRoot, deleteSlash;
   String label(Map<String, dynamic> row) {
     for (final key in ['nome', 'nomePopular', 'nomeFase', 'descricao']) {
       if (row[key] is String && (row[key] as String).isNotEmpty) {
@@ -141,7 +142,7 @@ const resources = [
     'Propriedade',
     'Fazenda',
     Icons.landscape_outlined,
-    'Organize suas fazendas e estações de referência.',
+    'Consulte as fazendas e suas estações cadastradas no aplicativo web.',
     [
       DataField('nome', 'Nome'),
       DataField('localizacao', 'Localização'),
@@ -159,6 +160,7 @@ const resources = [
         required: false,
       ),
     ],
+    readOnly: true,
   ),
   ResourceSpec(
     'tipoSolo',
@@ -203,7 +205,7 @@ const resources = [
     'Setor',
     'Fazenda',
     Icons.grid_view_rounded,
-    'Divida a propriedade em áreas de cultivo e monitoramento.',
+    'Consulte os setores cadastrados no sistema web da fazenda.',
     [
       DataField('nome', 'Nome'),
       DataField(
@@ -224,6 +226,7 @@ const resources = [
         resource: 'tipoSolo',
       ),
     ],
+    readOnly: true,
   ),
   ResourceSpec(
     'cultura',
@@ -427,7 +430,7 @@ const resources = [
     'Estação',
     'Clima',
     Icons.cloud_outlined,
-    'Estações físicas e fontes de dados climáticos.',
+    'Consulte as estações meteorológicas cadastradas no aplicativo web.',
     [
       DataField('nome', 'Nome'),
       DataField(
@@ -441,6 +444,7 @@ const resources = [
       DataField('apiSource', 'Fonte de dados', required: false),
       DataField('apiKey', 'Chave de acesso', required: false),
     ],
+    readOnly: true,
     putAtRoot: true,
   ),
   ResourceSpec(

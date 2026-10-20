@@ -1,8 +1,15 @@
-param([string]$ApiBaseUrl = 'http://localhost:8081')
+﻿param([string]$ApiBaseUrl = 'http://localhost:8081')
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 $flutterCommand = Get-Command flutter -ErrorAction SilentlyContinue
-$flutterPath = if ($flutterCommand) { $flutterCommand.Source } else { 'C:\Users\Aluno\develop\flutter\bin\flutter.bat' }
+$flutterPath = if ($flutterCommand) {
+    $flutterCommand.Source
+} else {
+    @('C:\flutter\bin\flutter.bat', 'C:\Users\Aluno\develop\flutter\bin\flutter.bat') |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        Select-Object -First 1
+}
+if (-not $flutterPath) { throw 'Flutter não encontrado. Adicione o SDK ao PATH.' }
 if (-not (Test-Path -LiteralPath $flutterPath)) { throw 'Flutter não encontrado. Adicione o SDK ao PATH.' }
 & $flutterPath pub get
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

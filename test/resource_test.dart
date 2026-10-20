@@ -108,60 +108,102 @@ http.Response response(Object value, [int status = 200]) => http.Response(
 
 void main() {
   for (final entry in examples.entries) {
-    testWidgets('Edita ${entry.key} sem perder vínculos ou tipos de dados', (
-      tester,
-    ) async {
-      await tester.binding.setSurfaceSize(const Size(360, 900));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      http.Request? saved;
-      final api = ApiClient(
-        client: MockClient((request) async {
-          if (request.method == 'GET') return response([ref]);
-          saved = request;
-          return response({'id': 9});
-        }),
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData.dark(),
-          home: ResourceEditor(
-            api: api,
-            spec: resource(entry.key),
-            row: {'id': 9, ...entry.value},
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      await tester.ensureVisible(find.text('Salvar registro'));
-      await tester.tap(find.text('Salvar registro'));
-      await tester.pumpAndSettle();
-      expect(saved, isNotNull);
-      expect(saved!.method, 'PUT');
-      expect(
-        saved!.url.path,
-        entry.key == 'estacaoMetereologica'
-            ? '/estacaoMetereologica'
-            : '/${entry.key}/9',
-      );
-      final payload = jsonDecode(saved!.body) as Map;
-      expect(payload['id'], 9);
-      for (final field in entry.value.entries) {
-        final expected = field.value is Map
-            ? {'id': 1}
-            : field.key == 'estacoes'
-            ? [
-                {'id': 1},
-              ]
-            : field.value;
-        expect(
-          payload[field.key],
-          expected,
-          reason: '${entry.key}.${field.key}',
+    final readOnly = [
+      'propriedade',
+      'setor',
+      'estacaoMetereologica',
+    ].contains(entry.key);
+    testWidgets(
+      readOnly
+          ? 'Consulta ${entry.key} sem permitir alterações mesmo para equipe'
+          : 'Edita ${entry.key} sem perder vínculos ou tipos de dados',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(360, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        http.Request? saved;
+        final api = ApiClient(
+          client: MockClient((request) async {
+            if (request.method == 'GET') {
+              return response([
+                if (readOnly) {'id': 9, ...entry.value} else ref,
+              ]);
+            }
+            saved = request;
+            return response({'id': 9});
+          }),
         );
-      }
-      expect(tester.takeException(), isNull);
-    });
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: ResourceEditor(
+              api: api,
+              spec: resource(entry.key),
+              row: {'id': 9, ...entry.value},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        if (readOnly) {
+          expect(resource(entry.key).readOnly, isTrue);
+          expect(find.text('Salvar alterações'), findsNothing);
+          expect(find.byType(TextFormField), findsNothing);
+          expect(find.textContaining('aplicativo web'), findsOneWidget);
+          expect(saved, isNull);
+
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: ThemeData.dark(),
+              home: ResourceScreen(
+                api: api,
+                spec: resource(entry.key),
+                canManage: true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(FloatingActionButton), findsNothing);
+          expect(find.byTooltip('Ações do registro'), findsNothing);
+          expect(find.text('Novo registro'), findsNothing);
+          await tester.tap(find.text(resource(entry.key).label(entry.value)));
+          await tester.pumpAndSettle();
+          expect(find.byType(AlertDialog), findsOneWidget);
+          expect(find.text('Editar'), findsNothing);
+          expect(find.text('Excluir'), findsNothing);
+          expect(saved, isNull);
+          expect(tester.takeException(), isNull);
+          return;
+        }
+        await tester.ensureVisible(find.text('Salvar alterações'));
+        await tester.tap(find.text('Salvar alterações'));
+        await tester.pumpAndSettle();
+        expect(saved, isNotNull);
+        expect(saved!.method, 'PUT');
+        expect(
+          saved!.url.path,
+          entry.key == 'estacaoMetereologica'
+              ? '/estacaoMetereologica'
+              : '/${entry.key}/9',
+        );
+        final payload = jsonDecode(saved!.body) as Map;
+        expect(payload['id'], 9);
+        for (final field in entry.value.entries) {
+          final expected = field.value is Map
+              ? {'id': 1}
+              : field.key == 'estacoes'
+              ? [
+                  {'id': 1},
+                ]
+              : field.value;
+          expect(
+            payload[field.key],
+            expected,
+            reason: '${entry.key}.${field.key}',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
   testWidgets('Erro do servidor mantém formulário e valores editados', (
     tester,
@@ -173,17 +215,64 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: ResourceEditor(api: api, spec: resource('cultura')),
+        home: ResourceEditor(
+          api: api,
+          spec: resource('cultura'),
+          row: {'id': 9, ...examples['cultura']!},
+        ),
       ),
     );
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).at(0), 'Milho');
     await tester.enterText(find.byType(TextFormField).at(1), 'Doce');
-    await tester.ensureVisible(find.text('Salvar registro'));
-    await tester.tap(find.text('Salvar registro'));
+    await tester.ensureVisible(find.text('Salvar alterações'));
+    await tester.tap(find.text('Salvar alterações'));
     await tester.pumpAndSettle();
     expect(find.text('Cultura já cadastrada.'), findsOneWidget);
     expect(find.text('Milho'), findsOneWidget);
+  });
+  testWidgets('Equipe consulta e edita sem botão para novo cadastro a 320 px', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final requests = <http.Request>[];
+    final api = ApiClient(
+      client: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET') {
+          return response([
+            {'id': 9, ...examples['cultura']!},
+          ]);
+        }
+        return response({'id': 9});
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ResourceScreen(
+          api: api,
+          spec: resource('cultura'),
+          canManage: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Novo registro'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('Ações do registro'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Editar cultura'), findsOneWidget);
+    await tester.ensureVisible(find.text('Salvar alterações'));
+    await tester.tap(find.text('Salvar alterações'));
+    await tester.pumpAndSettle();
+    expect(requests.any((request) => request.method == 'POST'), isFalse);
+    expect(requests.any((request) => request.method == 'PUT'), isTrue);
+    expect(tester.takeException(), isNull);
   });
   testWidgets('Consulta de produtor não mostra ações de escrita', (
     tester,
