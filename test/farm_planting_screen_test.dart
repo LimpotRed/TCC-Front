@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -8,317 +7,425 @@ import 'package:ghydro/farm_planting_screen.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-http.Response _json(Object value, [int status = 200]) => http.Response(
-  jsonEncode(value),
-  status,
-  headers: {'content-type': 'application/json; charset=utf-8'},
-);
-
 void main() {
-  testWidgets('Resposta tardia de outra fazenda não troca os setores', (
+  testWidgets('Cartão anterior mostra safra atual e histórico em celular', (
     tester,
   ) async {
-    final oldResponse = Completer<http.Response>();
+    await tester.binding.setSurfaceSize(const Size(320, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final api = ApiClient(
-      client: MockClient((request) async {
-        if (request.url.path == '/propriedade/1/safras/setores') {
-          return oldResponse.future;
-        }
-        return _json([
-          {
-            'id': 20,
-            'nome': 'Setor autorizado',
-            'status': 'EM_DESCANSO',
-            'plantioAtivo': null,
-          },
-        ]);
-      }),
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData.dark(),
-        home: FarmPlantingScreen(
-          api: api,
-          farms: const [
-            {'id': 1, 'nome': 'Fazenda antiga'},
-            {'id': 2, 'nome': 'Fazenda atual'},
-          ],
-          selectedFarmId: '1',
+      client: MockClient(
+        (request) async => http.Response(
+          jsonEncode([
+            {
+              'id': 1,
+              'nome': 'Setor Norte',
+              'plantios': [
+                {
+                  'id': 1,
+                  'cultura': {'id': 1, 'nomePopular': 'Milho'},
+                  'statusPlantio': 'EM_ANDAMENTO',
+                  'dataPlantio': '2026-01-01',
+                },
+                {
+                  'id': 2,
+                  'cultura': {'id': 2, 'nomePopular': 'Soja'},
+                  'statusPlantio': 'CONCLUIDO',
+                  'dataPlantio': '2025-01-01',
+                  'dataColheitaReal': '2025-05-01',
+                },
+              ],
+            },
+          ]),
+          200,
         ),
       ),
     );
-    await tester.pump();
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Fazenda atual').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Setor autorizado'), findsOneWidget);
-    oldResponse.complete(
-      _json([
-        {
-          'id': 10,
-          'nome': 'Setor antigo',
-          'status': 'EM_DESCANSO',
-          'plantioAtivo': null,
-        },
-      ]),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FarmPlantingScreen(
+          api: api,
+          farms: const [
+            {'id': 9, 'nome': 'Fazenda'},
+          ],
+        ),
+      ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Setor antigo'), findsNothing);
-    expect(find.text('Setor autorizado'), findsOneWidget);
+    expect(find.text('Gestão de safras e plantios'), findsOneWidget);
+    expect(find.text('SAFRA ATUAL'), findsOneWidget);
+    expect(find.text('Safra ativa'), findsOneWidget);
+    expect(find.text('Milho'), findsOneWidget);
+    await tester.ensureVisible(find.text('Ver histórico produtivo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ver histórico produtivo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Soja'), findsOneWidget);
+    expect(find.textContaining('01/05/2025'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
-
-  testWidgets('Mostra somente setores da fazenda selecionada em 320 px', (
+  testWidgets('Consulta setores e seus plantios na rota atual em 320 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(320, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final paths = <String>[];
-    String? selection;
     final api = ApiClient(
       client: MockClient((request) async {
         paths.add(request.url.path);
-        expect(request.headers['Authorization'], 'Bearer token-teste');
-        if (request.url.path == '/propriedade/1/safras/setores') {
-          return _json([
+        return http.Response(
+          jsonEncode([
             {
-              'id': 10,
+              'id': 1,
               'nome': 'Setor Norte',
-              'status': 'EM_DESCANSO',
-              'plantioAtivo': null,
+              'plantios': [
+                {
+                  'id': 3,
+                  'cultura': {'nomePopular': 'Milho'},
+                  'statusPlantio': 'EM_ANDAMENTO',
+                  'dataPlantio': '2026-01-01',
+                },
+              ],
             },
-          ]);
-        }
-        if (request.url.path == '/propriedade/2/safras/setores') {
-          return _json([
-            {
-              'id': 20,
-              'nome': 'Setor Sul',
-              'status': 'EM_DESCANSO',
-              'plantioAtivo': null,
-            },
-          ]);
-        }
-        fail('Rota inesperada: ${request.url.path}');
+          ]),
+          200,
+        );
       }),
-    )..token = 'token-teste';
-
+    );
     await tester.pumpWidget(
       MaterialApp(
-        theme: ThemeData.dark(),
         home: FarmPlantingScreen(
           api: api,
           farms: const [
-            {'id': 1, 'nome': 'Fazenda Norte'},
-            {'id': 2, 'nome': 'Fazenda Sul'},
+            {'id': 9, 'nome': 'Fazenda'},
           ],
-          selectedFarmId: '1',
-          onFarmChanged: (id) => selection = id,
         ),
       ),
     );
     await tester.pumpAndSettle();
+    expect(paths, ['/setor/propriedade/9']);
     expect(find.text('Setor Norte'), findsOneWidget);
-    expect(find.text('Setor Sul'), findsNothing);
-    expect(find.text('Cadastrar plantação'), findsOneWidget);
-    expect(find.text('Ver histórico produtivo'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Fazenda Sul').last);
-    await tester.pumpAndSettle();
-    expect(selection, '2');
-    expect(find.text('Setor Norte'), findsNothing);
-    expect(find.text('Setor Sul'), findsOneWidget);
-    expect(paths, [
-      '/propriedade/1/safras/setores',
-      '/propriedade/2/safras/setores',
-    ]);
+    expect(find.text('Milho'), findsOneWidget);
+    expect(find.text('Cadastrar plantação'), findsNothing);
+    expect(find.text('Registrar colheita'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Cadastra plantio, registra colheita e preserva histórico', (
+  testWidgets('Equipe registra colheita com PUT e preserva os vínculos', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(320, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    Map<String, dynamic>? active;
-    Map<String, dynamic>? completed;
-    Map<String, dynamic>? plantingPayload;
-    Map<String, dynamic>? harvestPayload;
+    Map<String, dynamic>? payload;
     final api = ApiClient(
       client: MockClient((request) async {
-        if (request.url.path == '/propriedade/1/safras/setores' &&
-            request.method == 'GET') {
-          return _json([
-            {
-              'id': 10,
-              'nome': 'Setor Central',
-              'status': active == null ? 'EM_DESCANSO' : 'SAFRA_ATIVA',
-              'plantioAtivo': active,
-            },
-          ]);
+        if (request.method == 'PUT' && request.url.path == '/plantio/3') {
+          payload = Map<String, dynamic>.from(jsonDecode(request.body) as Map);
+          return http.Response('{}', 200);
         }
-        if (request.url.path == '/cultura' && request.method == 'GET') {
-          return _json([
-            {'id': 7, 'nomePopular': 'Milho'},
-          ]);
-        }
-        if (request.url.path == '/propriedade/1/safras/setores/10/plantios' &&
-            request.method == 'POST') {
-          plantingPayload = Map<String, dynamic>.from(
-            jsonDecode(request.body) as Map,
+        if (request.url.path == '/setor/propriedade/9') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 1,
+                'nome': 'Setor Norte',
+                'plantios': [
+                  {
+                    'id': 3,
+                    'cultura': {'id': 7, 'nomePopular': 'Milho'},
+                    'statusPlantio': 'EM_ANDAMENTO',
+                    'dataPlantio': '2020-01-01',
+                    'dataColheitaEstimada': '2020-06-01',
+                  },
+                ],
+              },
+            ]),
+            200,
           );
-          active = {
-            'id': 30,
-            'setorId': 10,
-            'setorNome': 'Setor Central',
-            'culturaId': 7,
-            'culturaNome': 'Milho',
-            'dataPlantio': plantingPayload!['dataPlantio'],
-            'dataColheitaEstimada': null,
-            'statusPlantio': 'EM_ANDAMENTO',
-          };
-          return _json(active!, 201);
         }
-        if (request.url.path ==
-                '/propriedade/1/safras/setores/10/plantios/30/colheita' &&
-            request.method == 'POST') {
-          harvestPayload = Map<String, dynamic>.from(
-            jsonDecode(request.body) as Map,
-          );
-          completed = {
-            ...active!,
-            'statusPlantio': 'CONCLUIDO',
-            ...harvestPayload!,
-          };
-          active = null;
-          return _json(completed!, 201);
-        }
-        if (request.url.path == '/propriedade/1/safras/setores/10/historico' &&
-            request.method == 'GET') {
-          return _json([if (completed != null) completed!]);
-        }
-        fail('Rota inesperada: ${request.method} ${request.url.path}');
+        fail('Requisição inesperada: ${request.method} ${request.url.path}');
       }),
-    )..token = 'token-teste';
-
+    );
     await tester.pumpWidget(
       MaterialApp(
-        theme: ThemeData.dark(),
         home: FarmPlantingScreen(
           api: api,
+          canManagePlantings: true,
           farms: const [
-            {'id': 1, 'nome': 'Fazenda Central'},
+            {'id': 9, 'nome': 'Fazenda'},
           ],
-          selectedFarmId: '1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Cadastrar plantação'), findsNothing);
+    expect(
+      find.text('Este setor já possui uma safra não concluída.'),
+      findsOneWidget,
+    );
+    expect(find.text('Editar plantio'), findsNothing);
+    expect(find.text('Excluir plantio'), findsNothing);
+    final harvestButton = find.widgetWithText(
+      FilledButton,
+      'Registrar colheita',
+    );
+    final button = tester.widget<FilledButton>(harvestButton);
+    expect(
+      tester.getSize(harvestButton).width,
+      tester.getSize(find.text('Plantio: 01/01/2020')).width,
+    );
+    expect(tester.getSize(harvestButton).height, greaterThanOrEqualTo(48));
+    expect(
+      button.style!.backgroundColor!.resolve({}),
+      Theme.of(tester.element(harvestButton)).colorScheme.primary,
+    );
+    expect(button.style!.foregroundColor!.resolve({}), const Color(0xFF1B1938));
+    await tester.tap(find.text('Registrar colheita'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(payload?['setor'], {'id': 1});
+    expect(payload?['cultura'], {'id': 7});
+    expect(payload?['dataColheitaEstimada'], '2020-06-01');
+    expect(payload?['dataColheitaReal'], isNotNull);
+    expect(payload?['statusPlantio'], 'CONCLUIDO');
+  });
+
+  testWidgets('Equipe cadastra plantio e pode limpar previsão no celular', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Map<String, dynamic>? payload;
+    var sectorRequests = 0;
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/setor/propriedade/9') {
+          sectorRequests++;
+          return http.Response(
+            jsonEncode([
+              {'id': 1, 'nome': 'Setor Norte', 'plantios': []},
+            ]),
+            200,
+          );
+        }
+        if (request.method == 'GET' && request.url.path == '/cultura') {
+          return http.Response(
+            jsonEncode([
+              {'id': 7, 'nomePopular': 'Milho'},
+            ]),
+            200,
+          );
+        }
+        if (request.method == 'POST' && request.url.path == '/plantio') {
+          payload = Map<String, dynamic>.from(jsonDecode(request.body) as Map);
+          return http.Response('{}', 201);
+        }
+        fail('Requisição inesperada: ${request.method} ${request.url.path}');
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FarmPlantingScreen(
+          api: api,
+          canManagePlantings: true,
+          farms: const [
+            {'id': 9, 'nome': 'Fazenda'},
+          ],
         ),
       ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cadastrar plantação'));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    expect(find.text('Situação'), findsNothing);
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Milho').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Confirmar plantio'));
+    expect(find.text('Data de plantio'), findsOneWidget);
+    final estimated = find.text('Previsão de colheita (opcional)');
+    await tester.ensureVisible(estimated);
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(plantingPayload!['culturaId'], 7);
-    expect(plantingPayload!['dataPlantio'], matches(r'^\d{4}-\d{2}-\d{2}$'));
-    expect(find.text('Registrar colheita'), findsOneWidget);
-
-    await tester.tap(find.text('Registrar colheita'));
+    await tester.tap(estimated);
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text('Quantidade produzida'), findsNothing);
-    expect(find.text('Unidade de medida'), findsNothing);
-    expect(find.textContaining('Data da colheita:'), findsOneWidget);
-    await tester.tap(find.text('Confirmar colheita'));
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(harvestPayload!.keys, ['dataColheita']);
-    expect(harvestPayload!['dataColheita'], matches(r'^\d{4}-\d{2}-\d{2}$'));
-    expect(find.text('Cadastrar plantação'), findsOneWidget);
-
-    await tester.tap(find.text('Ver histórico produtivo'));
+    await tester.ensureVisible(find.text('Limpar previsão'));
     await tester.pumpAndSettle();
-    expect(find.text('Total de plantios: 1'), findsOneWidget);
-    expect(find.textContaining('Colheita real:'), findsOneWidget);
-    expect(find.textContaining('Produção:'), findsNothing);
-    expect(find.text('Concluído'), findsOneWidget);
+    await tester.tap(find.text('Limpar previsão'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(payload?['setor'], {'id': 1});
+    expect(payload?['cultura'], {'id': 7});
+    expect(payload?['statusPlantio'], 'EM_ANDAMENTO');
+    expect(payload?['dataPlantio'], matches(RegExp(r'^\d{4}-\d{2}-\d{2}$')));
+    expect(payload?['dataColheitaEstimada'], isNull);
+    expect(payload?['dataColheitaReal'], isNull);
+    expect(sectorRequests, 3);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'Permite tentar novamente carregar culturas sem fechar o formulário',
-    (tester) async {
-      var cultureRequests = 0;
-      Map<String, dynamic>? plantingPayload;
+  for (final status in ['EM_ANDAMENTO', 'PLANEJADO']) {
+    testWidgets('Setor com safra $status não permite novo cadastro', (
+      tester,
+    ) async {
       final api = ApiClient(
-        client: MockClient((request) async {
-          if (request.url.path == '/propriedade/1/safras/setores') {
-            return _json([
+        client: MockClient(
+          (request) async => http.Response(
+            jsonEncode([
               {
-                'id': 10,
-                'nome': 'Setor Central',
-                'status': 'EM_DESCANSO',
-                'plantioAtivo': null,
+                'id': 1,
+                'nome': 'Setor Norte',
+                'plantios': [
+                  {
+                    'id': 3,
+                    'statusPlantio': status,
+                    'cultura': {'nomePopular': 'Milho'},
+                  },
+                ],
               },
-            ]);
-          }
-          if (request.url.path == '/cultura') {
-            cultureRequests++;
-            return cultureRequests == 1
-                ? _json({'message': 'Falha ao carregar culturas.'}, 503)
-                : _json([
-                    {'id': 7, 'nomePopular': 'Milho'},
-                  ]);
-          }
-          if (request.url.path == '/propriedade/1/safras/setores/10/plantios' &&
-              request.method == 'POST') {
-            plantingPayload = Map<String, dynamic>.from(
-              jsonDecode(request.body) as Map,
-            );
-            return _json({'id': 30}, 201);
-          }
-          fail('Rota inesperada: ${request.method} ${request.url.path}');
-        }),
-      )..token = 'token-teste';
-
+            ]),
+            200,
+          ),
+        ),
+      );
       await tester.pumpWidget(
         MaterialApp(
-          theme: ThemeData.dark(),
           home: FarmPlantingScreen(
             api: api,
+            canManagePlantings: true,
             farms: const [
-              {'id': 1, 'nome': 'Fazenda Central'},
+              {'id': 9, 'nome': 'Fazenda'},
             ],
-            selectedFarmId: '1',
           ),
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Cadastrar plantação'));
-      await tester.pumpAndSettle();
-      expect(find.text('Falha ao carregar culturas.'), findsOneWidget);
-      expect(find.textContaining('Data do plantio:'), findsOneWidget);
+      expect(find.text('Cadastrar plantação'), findsNothing);
+      expect(
+        find.text('Este setor já possui uma safra não concluída.'),
+        findsOneWidget,
+      );
+    });
+  }
 
-      await tester.tap(find.text('Tentar novamente'));
-      await tester.pumpAndSettle();
-      expect(cultureRequests, 2);
-      expect(find.textContaining('Data do plantio:'), findsOneWidget);
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Milho').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Confirmar plantio'));
-      await tester.pumpAndSettle();
-      expect(plantingPayload?['culturaId'], 7);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('Colheita concluída libera novo cadastro e mantém histórico', (
+    tester,
+  ) async {
+    var harvested = false;
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.method == 'PUT') {
+          expect(jsonDecode(request.body)['statusPlantio'], 'CONCLUIDO');
+          harvested = true;
+          return http.Response('{}', 200);
+        }
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 1,
+              'nome': 'Setor Norte',
+              'plantios': [
+                {
+                  'id': 3,
+                  'cultura': {'id': 7, 'nomePopular': 'Milho'},
+                  'statusPlantio': harvested ? 'CONCLUIDO' : 'EM_ANDAMENTO',
+                  'dataPlantio': '2020-01-01',
+                },
+              ],
+            },
+          ]),
+          200,
+        );
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FarmPlantingScreen(
+          api: api,
+          canManagePlantings: true,
+          farms: const [
+            {'id': 9, 'nome': 'Fazenda'},
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Cadastrar plantação'), findsNothing);
+    await tester.tap(find.text('Registrar colheita'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cadastrar plantação'), findsOneWidget);
+    await tester.tap(find.text('Ver histórico produtivo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Milho'), findsOneWidget);
+  });
+
+  testWidgets('Não cadastra se o setor foi ocupado com formulário aberto', (
+    tester,
+  ) async {
+    var checks = 0;
+    var posted = false;
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/cultura') {
+          return http.Response(
+            jsonEncode([
+              {'id': 7, 'nomePopular': 'Milho'},
+            ]),
+            200,
+          );
+        }
+        if (request.method == 'POST') {
+          posted = true;
+          return http.Response('{}', 201);
+        }
+        checks++;
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 1,
+              'nome': 'Setor Norte',
+              'plantios': checks == 1
+                  ? []
+                  : [
+                      {'id': 3, 'statusPlantio': 'EM_ANDAMENTO'},
+                    ],
+            },
+          ]),
+          200,
+        );
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FarmPlantingScreen(
+          api: api,
+          canManagePlantings: true,
+          farms: const [
+            {'id': 9, 'nome': 'Fazenda'},
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cadastrar plantação'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Milho').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+    expect(posted, isFalse);
+    expect(
+      find.textContaining('Este setor já possui uma safra não concluída.'),
+      findsOneWidget,
+    );
+  });
 }

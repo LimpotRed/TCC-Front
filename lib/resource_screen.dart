@@ -13,12 +13,10 @@ class ResourceScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.spec,
-    required this.canManage,
     this.header,
   });
   final ApiClient api;
   final ResourceSpec spec;
-  final bool canManage;
   final Widget? header;
   @override
   State<ResourceScreen> createState() => _ResourceScreenState();
@@ -35,7 +33,6 @@ class _ResourceScreenState extends State<ResourceScreen> {
   int _generation = 0;
   static const pageSize = 12;
 
-  bool get _canWrite => widget.canManage && !widget.spec.readOnly;
   bool get _weatherOnly =>
       widget.spec.path == 'leituraClimatica' && widget.header != null;
 
@@ -65,61 +62,6 @@ class _ResourceScreenState extends State<ResourceScreen> {
       }
     } finally {
       if (mounted && generation == _generation) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _edit(Map<String, dynamic> row) async {
-    if (!_canWrite) return;
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) =>
-            ResourceEditor(api: widget.api, spec: widget.spec, row: row),
-      ),
-    );
-    if (changed == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Alterações salvas no servidor.')),
-      );
-      await _load();
-    }
-  }
-
-  Future<void> _delete(Map<String, dynamic> row) async {
-    if (!_canWrite) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Excluir registro?'),
-        content: Text(
-          'Excluir “${widget.spec.label(row)}”? Esta ação é permanente e pode remover registros dependentes. Revise os vínculos antes de confirmar.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted || !_canWrite) return;
-    setState(() => _busy = true);
-    try {
-      await widget.api.request(
-        'DELETE',
-        '${widget.spec.path}/${row['id']}${widget.spec.deleteSlash ? '/' : ''}',
-      );
-      if (mounted) await _load();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _busy = false;
-        });
-      }
     }
   }
 
@@ -188,7 +130,9 @@ class _ResourceScreenState extends State<ResourceScreen> {
     final visible = _rows
         .where(
           (row) =>
-              row.values
+              row.entries
+                  .where((entry) => entry.key != 'apiKey')
+                  .map((entry) => entry.value)
                   .map(displayValue)
                   .join(' ')
                   .toLowerCase()
@@ -224,13 +168,10 @@ class _ResourceScreenState extends State<ResourceScreen> {
                 spec.description,
                 style: const TextStyle(color: Color(0xFFBDB6D3)),
               ),
-              if (!_canWrite)
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Text(
-                    spec.readOnly ? _readOnlyNotice : 'Consulta dos dados disponíveis para sua conta. Alterações são realizadas pela equipe técnica.',
-                  ),
-                ),
+              const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: Text(_readOnlyNotice),
+              ),
               const SizedBox(height: 20),
               if (widget.header != null) ...[
                 widget.header!,
@@ -330,35 +271,18 @@ class _ResourceScreenState extends State<ResourceScreen> {
                         ),
                       ),
                       onTap: () => _details(row),
-                      trailing: _canWrite
-                          ? PopupMenuButton<String>(
-                              tooltip: 'Ações do registro',
-                              onSelected: (action) {
-                                if (action == 'edit') {
-                                  _edit(row);
-                                } else if (action == 'history') {
-                                  _historyPath =
-                                      '${spec.path}/equipamento/${Uri.encodeComponent(row['tipoEquipamento'].toString())}/${row['equipamentoId']}';
-                                  _load();
-                                } else {
-                                  _delete(row);
-                                }
+                      trailing:
+                          spec.path == 'manutencao' &&
+                              row['tipoEquipamento'] != null &&
+                              row['equipamentoId'] != null
+                          ? IconButton(
+                              tooltip: 'Histórico do equipamento',
+                              icon: const Icon(Icons.history),
+                              onPressed: () {
+                                _historyPath =
+                                    '${spec.path}/equipamento/${Uri.encodeComponent(row['tipoEquipamento'].toString())}/${Uri.encodeComponent(row['equipamentoId'].toString())}';
+                                _load();
                               },
-                              itemBuilder: (_) => [
-                                if (spec.path == 'admin/manutencao')
-                                  const PopupMenuItem(
-                                    value: 'history',
-                                    child: Text('Histórico do equipamento'),
-                                  ),
-                                PopupMenuItem(
-                                  value: 'edit',
-                                  child: Text('Editar'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('Excluir'),
-                                ),
-                              ],
                             )
                           : const Icon(Icons.chevron_right),
                     ),
@@ -411,390 +335,4 @@ class ErrorPanel extends StatelessWidget {
       ),
     ),
   );
-}
-
-class ResourceEditor extends StatefulWidget {
-  const ResourceEditor({
-    super.key,
-    required this.api,
-    required this.spec,
-    required this.row,
-  });
-  final ApiClient api;
-  final ResourceSpec spec;
-  final Map<String, dynamic> row;
-  @override
-  State<ResourceEditor> createState() => _ResourceEditorState();
-}
-
-class _ResourceEditorState extends State<ResourceEditor> {
-  final _form = GlobalKey<FormState>();
-  final _controllers = <String, TextEditingController>{};
-  final _values = <String, dynamic>{};
-  final _lookups = <String, List<Map<String, dynamic>>>{};
-  bool _loading = true, _saving = false;
-  String? _error;
-  @override
-  void initState() {
-    super.initState();
-    if (widget.spec.readOnly) {
-      _loading = false;
-      return;
-    }
-    for (final field in widget.spec.fields) {
-      final value = widget.row[field.key];
-      if (field.kind == FieldKind.relation) {
-        _values[field.key] = value is Map ? value['id'] : null;
-      } else if (field.kind == FieldKind.relations) {
-        _values[field.key] = (value as List? ?? [])
-            .map((v) => v['id'])
-            .toList();
-      } else if (field.kind == FieldKind.multi) {
-        _values[field.key] = List<String>.from(value as List? ?? []);
-      } else if (field.kind == FieldKind.choice) {
-        _values[field.key] = value;
-      } else {
-        _controllers[field.key] = TextEditingController(
-          text: value?.toString() ?? '',
-        );
-      }
-    }
-    _loadLookups();
-  }
-
-  Future<void> _loadLookups() async {
-    if (widget.spec.readOnly) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final paths = widget.spec.fields
-          .map((f) => f.resource)
-          .whereType<String>()
-          .toSet();
-      await Future.wait(
-        paths.map((path) async {
-          _lookups[path] = await widget.api.list(path);
-        }),
-      );
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _controllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _pickDate(DataField field) async {
-    final current =
-        DateTime.tryParse(_controllers[field.key]!.text) ?? DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: current,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2200),
-    );
-    if (date == null || !mounted) return;
-    var result = date;
-    if (field.kind == FieldKind.dateTime) {
-      final time = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.fromDateTime(current),
-      );
-      if (time == null || !mounted) return;
-      result = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-      );
-    }
-    _controllers[field.key]!.text = field.kind == FieldKind.date
-        ? result.toIso8601String().split('T').first
-        : result.toIso8601String().split('.').first;
-    setState(() {});
-  }
-
-  Future<void> _save() async {
-    if (widget.spec.readOnly || _saving || !_form.currentState!.validate()) {
-      return;
-    }
-    final payload = <String, dynamic>{'id': widget.row['id']};
-    for (final f in widget.spec.fields) {
-      final text = _controllers[f.key]?.text.trim() ?? '';
-      payload[f.key] = switch (f.kind) {
-        FieldKind.number =>
-          text.isEmpty ? null : double.parse(text.replaceAll(',', '.')),
-        FieldKind.integer => text.isEmpty ? null : int.parse(text),
-        FieldKind.relation =>
-          _values[f.key] == null ? null : {'id': _values[f.key]},
-        FieldKind.relations =>
-          (_values[f.key] as List).map((id) => {'id': id}).toList(),
-        FieldKind.multi || FieldKind.choice => _values[f.key],
-        _ => text.isEmpty ? null : text,
-      };
-      if (f.key == 'apiKey' && text.isEmpty) payload.remove(f.key);
-    }
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      final spec = widget.spec;
-      final path = spec.putAtRoot
-          ? spec.path
-          : '${spec.path}/${widget.row['id']}';
-      await widget.api.request('PUT', path, body: payload);
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Widget _field(DataField field) {
-    final decoration = InputDecoration(
-      labelText: '${field.label}${field.required ? ' *' : ''}',
-      helperText: field.hint,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      errorMaxLines: 3,
-    );
-    if (field.kind == FieldKind.relation || field.kind == FieldKind.choice) {
-      final options = field.kind == FieldKind.relation
-          ? [
-              for (final row
-                  in _lookups[field.resource] ?? <Map<String, dynamic>>[])
-                DropdownMenuItem<Object>(
-                  value: row['id'],
-                  child: Text(
-                    resource(field.resource!).label(row),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-            ]
-          : [
-              for (final option in field.options)
-                DropdownMenuItem<Object>(
-                  value: option,
-                  child: Text(displayValue(option)),
-                ),
-            ];
-      final selected = options.any((o) => o.value == _values[field.key])
-          ? _values[field.key]
-          : null;
-      return DropdownButtonFormField<Object>(
-        initialValue: selected,
-        isExpanded: true,
-        decoration: decoration,
-        items: [
-          if (!field.required)
-            const DropdownMenuItem(value: null, child: Text('Sem vínculo')),
-          ...options,
-        ],
-        validator: (v) => field.required && v == null
-            ? 'Selecione ${field.label.toLowerCase()}.'
-            : null,
-        onChanged: (v) => setState(() => _values[field.key] = v),
-      );
-    }
-    if (field.kind == FieldKind.multi || field.kind == FieldKind.relations) {
-      final options = field.kind == FieldKind.multi
-          ? {for (final v in field.options) v: displayValue(v)}
-          : {
-              for (final row
-                  in _lookups[field.resource] ?? <Map<String, dynamic>>[])
-                row['id']: resource(field.resource!).label(row),
-            };
-      return FormField<List>(
-        initialValue: _values[field.key] as List,
-        validator: (_) => field.required && (_values[field.key] as List).isEmpty
-            ? 'Selecione ao menos uma opção.'
-            : null,
-        builder: (state) => InputDecorator(
-          decoration: decoration.copyWith(errorText: state.errorText),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (options.isEmpty)
-                const Text('Nenhum registro disponível para vincular.'),
-              for (final option in options.entries)
-                FilterChip(
-                  label: Text(option.value),
-                  selected: (_values[field.key] as List).contains(option.key),
-                  onSelected: (selected) => setState(() {
-                    final values = _values[field.key] as List;
-                    selected
-                        ? values.add(option.key)
-                        : values.remove(option.key);
-                    state.didChange(values);
-                  }),
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-    final isDate = [FieldKind.date, FieldKind.dateTime].contains(field.kind);
-    final isNumber = [FieldKind.number, FieldKind.integer].contains(field.kind);
-    return TextFormField(
-      controller: _controllers[field.key],
-      readOnly: isDate,
-      obscureText: field.key == 'apiKey',
-      onTap: isDate ? () => _pickDate(field) : null,
-      keyboardType: isNumber
-          ? const TextInputType.numberWithOptions(decimal: true, signed: true)
-          : TextInputType.text,
-      decoration: decoration.copyWith(
-        suffixIcon: isDate
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!field.required)
-                    IconButton(
-                      tooltip: 'Limpar data',
-                      onPressed: () =>
-                          setState(() => _controllers[field.key]!.clear()),
-                      icon: const Icon(Icons.clear),
-                    ),
-                  const Icon(Icons.calendar_today_outlined),
-                  const SizedBox(width: 12),
-                ],
-              )
-            : null,
-      ),
-      validator: (value) {
-        final text = value?.trim() ?? '';
-        if (text.isEmpty) {
-          return field.required
-              ? 'Informe ${field.label.toLowerCase()}.'
-              : null;
-        }
-        if (isNumber) {
-          final number = field.kind == FieldKind.integer
-              ? int.tryParse(text)
-              : double.tryParse(text.replaceAll(',', '.'));
-          if (number == null || !number.isFinite) {
-            return 'Informe um número válido.';
-          }
-          if (field.min != null && number < field.min!) {
-            return 'Valor abaixo do permitido.';
-          }
-          if (field.max != null && number > field.max!) {
-            return 'O máximo é ${field.max}.';
-          }
-        }
-        if (isDate && DateTime.tryParse(text) == null) {
-          return 'Selecione uma data válida.';
-        }
-        return null;
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.spec.readOnly) {
-      return Scaffold(
-        appBar: AppBar(title: Text(widget.spec.title)),
-        body: const SafeArea(
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(_readOnlyNotice, textAlign: TextAlign.center),
-            ),
-          ),
-        ),
-      );
-    }
-    return PopScope(
-      canPop: !_saving,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('Editar ${widget.spec.singular.toLowerCase()}'),
-        ),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : Form(
-                    key: _form,
-                    child: ListView(
-                      padding: const EdgeInsets.all(24),
-                      children: [
-                        const Text('Campos com * são obrigatórios.'),
-                        const SizedBox(height: 24),
-                        if (_lookups.length <
-                            widget.spec.fields
-                                .map((f) => f.resource)
-                                .whereType<String>()
-                                .toSet()
-                                .length)
-                          ErrorPanel(
-                            message:
-                                _error ??
-                                'Não foi possível carregar os vínculos.',
-                            retry: _loadLookups,
-                          )
-                        else ...[
-                          AbsorbPointer(
-                            absorbing: _saving,
-                            child: Column(
-                              children: [
-                                for (final field in widget.spec.fields)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 20),
-                                    child: _field(field),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (_error != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 20),
-                              child: Semantics(
-                                liveRegion: true,
-                                child: Text(
-                                  _error!,
-                                  style: const TextStyle(
-                                    color: Color(0xFFFFB4AB),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          FilledButton.icon(
-                            onPressed: _saving ? null : _save,
-                            icon: _saving
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.check),
-                            label: Text(
-                              _saving ? 'Salvando…' : 'Salvar alterações',
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
 }

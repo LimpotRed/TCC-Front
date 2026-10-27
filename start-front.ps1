@@ -13,5 +13,5 @@ if (-not $flutterPath) { throw 'Flutter não encontrado. Adicione o SDK ao PATH.
 if (-not (Test-Path -LiteralPath $flutterPath)) { throw 'Flutter não encontrado. Adicione o SDK ao PATH.' }
 & $flutterPath pub get
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& $flutterPath run -d web-server --web-hostname localhost --web-port 8080 "--dart-define=API_BASE_URL=$ApiBaseUrl"
+& $flutterPath run -d web-server --web-hostname localhost --web-port 4200 "--dart-define=API_BASE_URL=$ApiBaseUrl"
 exit $LASTEXITCODE

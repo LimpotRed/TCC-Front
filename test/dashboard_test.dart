@@ -10,6 +10,66 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  testWidgets('Produtor acessa cadastro e colheita em Gestão > Plantios', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final auth = AuthService(
+      api: ApiClient(
+        client: MockClient((request) async {
+          final data = switch (request.url.path) {
+            '/propriedade' => [
+              {'id': 9, 'nome': 'Fazenda'},
+            ],
+            '/setor/propriedade/9' => [
+              {
+                'id': 1,
+                'nome': 'Setor Norte',
+                'plantios': [
+                  {
+                    'id': 3,
+                    'cultura': {'id': 7, 'nomePopular': 'Milho'},
+                    'statusPlantio': 'EM_ANDAMENTO',
+                    'dataPlantio': '2020-01-01',
+                  },
+                ],
+              },
+            ],
+            _ => [],
+          };
+          return http.Response(jsonEncode(data), 200);
+        }),
+      )..token = 'sessão-teste',
+    )..profile = {'nome': 'Lucas', 'role': 'PRODUTOR'};
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DashboardScreen(
+          auth: auth,
+          name: 'Lucas',
+          email: 'lucas@example.com',
+          onLogout: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gestão'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Plantios');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Plantios'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cadastrar plantação'), findsNothing);
+    expect(
+      find.text('Este setor já possui uma safra não concluída.'),
+      findsOneWidget,
+    );
+    expect(find.text('Registrar colheita'), findsOneWidget);
+    expect(find.text('Editar plantio'), findsNothing);
+    expect(find.text('Excluir plantio'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Fazenda escolhida permanece ao trocar aba e atualizar painel', (
     tester,
   ) async {
@@ -27,15 +87,13 @@ void main() {
                 {'id': 1, 'nome': 'Fazenda central'},
                 {'id': 2, 'nome': 'Fazenda sul'},
               ],
-              '/propriedade/1/estacoes' => [
-                {
-                  'id': 1,
-                  'nome': 'Estação central',
-                  'latitude': -16.8,
-                  'longitude': -50.0,
-                },
-              ],
-              '/propriedade/1/safras/setores' => [
+              '/estacaoMetereologica/propriedade/1' => {
+                'id': 1,
+                'nome': 'Estação central',
+                'latitude': -16.8,
+                'longitude': -50.0,
+              },
+              '/setor/propriedade/1' => [
                 {
                   'id': 10,
                   'nome': 'Setor Norte',
@@ -43,15 +101,13 @@ void main() {
                   'plantioAtivo': null,
                 },
               ],
-              '/propriedade/2/estacoes' => [
-                {
-                  'id': 2,
-                  'nome': 'Estação sul',
-                  'latitude': -23.5,
-                  'longitude': -46.6,
-                },
-              ],
-              '/propriedade/2/safras/setores' => [
+              '/estacaoMetereologica/propriedade/2' => {
+                'id': 2,
+                'nome': 'Estação sul',
+                'latitude': -23.5,
+                'longitude': -46.6,
+              },
+              '/setor/propriedade/2' => [
                 {
                   'id': 20,
                   'nome': 'Setor Sul',
@@ -94,8 +150,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Clima da fazenda'), findsNothing);
     expect(queriedLatitudes, isEmpty);
-    expect(queriedPaths.where((p) => p.endsWith('/estacoes')), isEmpty);
-    expect(queriedPaths, contains('/propriedade/1/safras/setores'));
+    expect(
+      queriedPaths.where(
+        (p) => p.startsWith('/estacaoMetereologica/propriedade/'),
+      ),
+      isEmpty,
+    );
+    expect(queriedPaths, contains('/setor/propriedade/1'));
     expect(queriedPaths, isNot(contains('/plantio')));
     expect(queriedPaths.where((p) => p.endsWith('/indicadores')), isEmpty);
 
@@ -118,7 +179,7 @@ void main() {
     await tester.tap(find.text('Fazenda sul').last);
     await tester.pumpAndSettle();
     expect(queriedLatitudes.last, '-23.5');
-    expect(queriedPaths, contains('/propriedade/2/safras/setores'));
+    expect(queriedPaths, contains('/setor/propriedade/2'));
 
     await tester.tap(find.byTooltip('Atualizar clima'));
     await tester.pumpAndSettle();
@@ -240,7 +301,13 @@ void main() {
       await tester.tap(find.text('Perfil'));
       await tester.pumpAndSettle();
       expect(find.text('lucas@example.com'), findsOneWidget);
+      expect(find.text('Editar perfil'), findsNothing);
+      expect(
+        find.text('Os dados do perfil são somente para consulta.'),
+        findsOneWidget,
+      );
       await tester.ensureVisible(find.text('Sair da conta'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Sair da conta'));
       expect(loggedOut, isTrue);
     });

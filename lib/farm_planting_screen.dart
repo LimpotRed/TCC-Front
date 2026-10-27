@@ -3,37 +3,28 @@ import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'resource_schema.dart';
 
-const _surface = Color(0xFF242144);
-const _muted = Color(0xFFA39DBF);
-const _cyan = Color(0xFF36C9D8);
-const _green = Color(0xFF65D99A);
-
-String _date(dynamic value) {
-  final parsed = DateTime.tryParse(value?.toString() ?? '');
-  if (parsed == null) return 'Não informado';
-  return '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
+bool _sectorHasOpenPlanting(Map<dynamic, dynamic> sector) {
+  final plantings = sector['plantios'];
+  if (plantings is! List) return true;
+  return plantings.any(
+    (planting) => planting is! Map || planting['statusPlantio'] != 'CONCLUIDO',
+  );
 }
 
-String _iso(DateTime value) =>
-    '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
-
-String _text(dynamic value, [String fallback = 'Não informado']) {
-  final result = value?.toString().trim();
-  return result == null || result.isEmpty ? fallback : result;
-}
-
-/// Safras da fazenda selecionada. Setores são cadastrados no sistema web.
+/// Mostra os plantios que a API retorna em cada setor da propriedade.
 class FarmPlantingScreen extends StatefulWidget {
   const FarmPlantingScreen({
     super.key,
     required this.api,
     required this.farms,
+    this.canManagePlantings = false,
     this.selectedFarmId,
     this.onFarmChanged,
   });
 
   final ApiClient api;
   final List<Map<String, dynamic>> farms;
+  final bool canManagePlantings;
   final String? selectedFarmId;
   final ValueChanged<String?>? onFarmChanged;
 
@@ -43,136 +34,67 @@ class FarmPlantingScreen extends StatefulWidget {
 
 class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
   String? _farmId;
-  List<Map<String, dynamic>> _sectors = [];
-  bool _busy = false;
-  String? _error;
-  int _generation = 0;
-
-  List<Map<String, dynamic>> get _farms =>
-      widget.farms.where((farm) => farm['id'] != null).toList(growable: false);
+  Future<List<Map<String, dynamic>>>? _sectors;
 
   @override
   void initState() {
     super.initState();
-    final farms = _farms;
-    final ids = farms.map((farm) => farm['id'].toString()).toSet();
+    final ids = widget.farms
+        .where((f) => f['id'] != null)
+        .map((f) => f['id'].toString())
+        .toList();
     _farmId = ids.contains(widget.selectedFarmId)
         ? widget.selectedFarmId
-        : (farms.isEmpty ? null : farms.first['id'].toString());
-    if (_farmId != null) _load();
+        : (ids.isEmpty ? null : ids.first);
+    _refresh();
   }
 
-  String _path(String sectorId) =>
-      'propriedade/${Uri.encodeComponent(_farmId!)}/safras/setores/${Uri.encodeComponent(sectorId)}';
-
-  Future<void> _load() async {
-    final farmId = _farmId;
-    final generation = ++_generation;
-    if (farmId == null) return;
+  void _refresh() {
+    final id = _farmId;
     setState(() {
-      _busy = true;
-      _error = null;
+      _sectors = id == null
+          ? null
+          : widget.api.list('setor/propriedade/${Uri.encodeComponent(id)}');
     });
-    try {
-      final sectors = await widget.api.list(
-        'propriedade/${Uri.encodeComponent(farmId)}/safras/setores',
-      );
-      if (mounted && generation == _generation) {
-        setState(() => _sectors = sectors);
-      }
-    } catch (error) {
-      if (mounted && generation == _generation) {
-        setState(() => _error = error.toString());
-      }
-    } finally {
-      if (mounted && generation == _generation) {
-        setState(() => _busy = false);
-      }
-    }
-  }
-
-  void _selectFarm(String? id) {
-    if (id == null || id == _farmId) return;
-    setState(() {
-      _farmId = id;
-      _sectors = [];
-    });
-    widget.onFarmChanged?.call(id);
-    _load();
   }
 
   Future<void> _createPlanting(Map<String, dynamic> sector) async {
-    final sectorId = sector['id']?.toString();
-    if (sectorId == null || _farmId == null) return;
+    final farmId = _farmId;
+    if (!widget.canManagePlantings ||
+        sector['id'] == null ||
+        farmId == null ||
+        _sectorHasOpenPlanting(sector)) {
+      return;
+    }
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _CreatePlantingDialog(
         api: widget.api,
-        path: '${_path(sectorId)}/plantios',
-        sectorName: _text(sector['nome'], 'Setor #$sectorId'),
+        sector: sector,
+        farmId: farmId,
       ),
     );
     if (saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Plantio registrado com sucesso.')),
       );
-      await _load();
     }
-  }
-
-  Future<void> _registerHarvest(
-    Map<String, dynamic> sector,
-    Map<String, dynamic> planting,
-  ) async {
-    final sectorId = sector['id']?.toString();
-    final plantingId = planting['id']?.toString();
-    if (sectorId == null || plantingId == null || _farmId == null) return;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (_) => _HarvestDialog(
-        api: widget.api,
-        path:
-            '${_path(sectorId)}/plantios/${Uri.encodeComponent(plantingId)}/colheita',
-        cultureName: _text(planting['culturaNome']),
-        plantingDate: DateTime.tryParse(
-          planting['dataPlantio']?.toString() ?? '',
-        ),
-      ),
-    );
-    if (saved == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Colheita registrada com sucesso.')),
-      );
-      await _load();
-    }
-  }
-
-  void _showHistory(Map<String, dynamic> sector) {
-    final sectorId = sector['id']?.toString();
-    if (sectorId == null || _farmId == null) return;
-    showDialog<void>(
-      context: context,
-      builder: (_) => _HistoryDialog(
-        api: widget.api,
-        path: '${_path(sectorId)}/historico',
-        sectorName: _text(sector['nome'], 'Setor #$sectorId'),
-      ),
-    );
+    if (mounted) _refresh();
   }
 
   @override
   Widget build(BuildContext context) {
-    final farms = _farms;
-    final selectedFarm = farms.where((row) => row['id'].toString() == _farmId);
+    final farms = widget.farms.where((farm) => farm['id'] != null).toList();
+    final selected = farms.where((farm) => farm['id'].toString() == _farmId);
     return Scaffold(
       backgroundColor: const Color(0xFF15142F),
       appBar: AppBar(
         title: const Text('Plantio em andamento'),
         actions: [
           IconButton(
-            tooltip: 'Atualizar setores',
-            onPressed: _busy || _farmId == null ? null : _load,
+            onPressed: _farmId == null ? null : _refresh,
             icon: const Icon(Icons.refresh),
+            tooltip: 'Atualizar setores',
           ),
         ],
       ),
@@ -180,87 +102,104 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1100),
-            child: RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 36),
-                children: [
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 36),
+              children: [
+                const Text(
+                  'Gestão de safras e plantios',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Acompanhe a safra atual e o histórico produtivo de cada setor.',
+                  style: TextStyle(color: Color(0xFFA39DBF)),
+                ),
+                if (!widget.canManagePlantings) ...[
+                  const SizedBox(height: 12),
                   const Text(
-                    'Gestão de safras e plantios',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    'Seu perfil não permite cadastrar plantios ou registrar colheitas.',
+                    style: TextStyle(color: Color(0xFFA39DBF)),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Acompanhe a safra atual e o histórico produtivo de cada setor.',
-                    style: TextStyle(color: _muted),
-                  ),
-                  const SizedBox(height: 20),
-                  if (farms.length > 1)
-                    DropdownButtonFormField<String>(
-                      key: ValueKey(_farmId),
-                      initialValue: _farmId,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Fazenda',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        for (final farm in farms)
-                          DropdownMenuItem(
-                            value: farm['id'].toString(),
-                            child: Text(
-                              _text(farm['nome'], 'Fazenda #${farm['id']}'),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: _selectFarm,
-                    )
-                  else if (selectedFarm.isNotEmpty)
-                    Text(
-                      _text(selectedFarm.first['nome']),
-                      style: const TextStyle(
-                        color: _cyan,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                  if (_farmId == null)
-                    const _MessageCard(
-                      'Nenhuma fazenda está vinculada à sua conta. Solicite o vínculo no sistema web.',
-                    )
-                  else if (_busy)
-                    const Center(
-                      child: CircularProgressIndicator(
-                        semanticsLabel: 'Carregando setores da fazenda',
-                      ),
-                    )
-                  else if (_error != null)
-                    _MessageCard(
-                      _error!,
-                      action: TextButton(
-                        onPressed: _load,
-                        child: const Text('Tentar novamente'),
-                      ),
-                    )
-                  else if (_sectors.isEmpty)
-                    const _MessageCard(
-                      'Esta fazenda ainda não possui setores. O cadastro de setores é feito no sistema web.',
-                    )
-                  else ...[
-                    Text(
-                      '${_sectors.length} ${_sectors.length == 1 ? 'setor' : 'setores'} nesta fazenda',
-                      style: const TextStyle(color: _muted),
-                    ),
-                    const SizedBox(height: 12),
-                    for (final sector in _sectors) ...[
-                      _sectorCard(sector),
-                      const SizedBox(height: 14),
-                    ],
-                  ],
                 ],
-              ),
+                const SizedBox(height: 20),
+                if (farms.length > 1)
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(_farmId),
+                    initialValue: _farmId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Fazenda',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final farm in farms)
+                        DropdownMenuItem(
+                          value: farm['id'].toString(),
+                          child: Text(
+                            farm['nome']?.toString() ?? 'Fazenda',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (id) {
+                      _farmId = id;
+                      widget.onFarmChanged?.call(id);
+                      _refresh();
+                    },
+                  )
+                else if (selected.isNotEmpty)
+                  Text(
+                    selected.first['nome']?.toString() ?? 'Fazenda',
+                    style: const TextStyle(
+                      color: Color(0xFF36C9D8),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                const SizedBox(height: 20),
+                if (_farmId == null)
+                  const _MessageCard(
+                    'Nenhuma fazenda disponível para sua conta.',
+                  )
+                else
+                  FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _sectors,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return _MessageCard(
+                          snapshot.error.toString(),
+                          action: TextButton(
+                            onPressed: _refresh,
+                            child: const Text('Tentar novamente'),
+                          ),
+                        );
+                      }
+                      final sectors = snapshot.data ?? [];
+                      if (sectors.isEmpty) {
+                        return const _MessageCard(
+                          'Esta fazenda ainda não possui setores.',
+                        );
+                      }
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            '${sectors.length} ${sectors.length == 1 ? 'setor' : 'setores'} nesta fazenda',
+                            style: const TextStyle(color: Color(0xFFA39DBF)),
+                          ),
+                          const SizedBox(height: 12),
+                          for (final sector in sectors) ...[
+                            _sectorCard(sector),
+                            const SizedBox(height: 14),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+              ],
             ),
           ),
         ),
@@ -269,12 +208,21 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
   }
 
   Widget _sectorCard(Map<String, dynamic> sector) {
-    final planting = sector['plantioAtivo'] is Map
-        ? Map<String, dynamic>.from(sector['plantioAtivo'] as Map)
-        : null;
-    final active = planting != null;
+    final rows = sector['plantios'] is List
+        ? (sector['plantios'] as List).whereType<Map>().toList()
+        : <Map>[];
+    final active = rows
+        .where(
+          (row) =>
+              row['statusPlantio'] == 'EM_ANDAMENTO' ||
+              row['statusPlantio'] == 'PLANEJADO',
+        )
+        .toList();
+    final inProgress = active.any(
+      (row) => row['statusPlantio'] == 'EM_ANDAMENTO',
+    );
     return Card(
-      color: _surface,
+      color: const Color(0xFF242144),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
         side: const BorderSide(color: Color(0xFF393254)),
@@ -286,11 +234,14 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.location_on_outlined, color: _cyan),
+                const Icon(
+                  Icons.location_on_outlined,
+                  color: Color(0xFF36C9D8),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _text(sector['nome'], 'Setor #${sector['id']}'),
+                    sector['nome']?.toString() ?? 'Setor',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -302,16 +253,16 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
                 const SizedBox(width: 8),
                 Flexible(
                   child: _StatusPill(
-                    planting?['statusPlantio'] == 'PLANEJADO'
-                        ? 'Planejado'
-                        : active
+                    active.isEmpty
+                        ? 'Em descanso'
+                        : inProgress
                         ? 'Safra ativa'
-                        : 'Em descanso',
-                    planting?['statusPlantio'] == 'PLANEJADO'
-                        ? _cyan
-                        : active
-                        ? _green
-                        : _muted,
+                        : 'Planejado',
+                    active.isEmpty
+                        ? const Color(0xFFA39DBF)
+                        : inProgress
+                        ? const Color(0xFF65D99A)
+                        : const Color(0xFF36C9D8),
                   ),
                 ),
               ],
@@ -328,69 +279,52 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
                 color: const Color(0xFF1B1938),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: active
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+              child: active.isEmpty
+                  ? const Column(
                       children: [
-                        Text(
-                          _text(planting['culturaNome']),
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text('Plantio: ${_date(planting['dataPlantio'])}'),
-                        Text(
-                          'Colheita estimada: ${_date(planting['dataColheitaEstimada'])}',
-                        ),
-                        Text(
-                          'Situação: ${displayValue(planting['statusPlantio'])}',
-                        ),
-                        const SizedBox(height: 14),
-                        if (planting['statusPlantio'] == 'EM_ANDAMENTO')
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: FilledButton.icon(
-                              onPressed: () =>
-                                  _registerHarvest(sector, planting),
-                              icon: const Icon(Icons.task_alt),
-                              label: const Text('Registrar colheita'),
-                            ),
-                          )
-                        else
-                          const Text(
-                            'A colheita estará disponível quando o plantio estiver em andamento.',
-                            style: TextStyle(color: _muted),
-                          ),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        const Icon(
+                        Icon(
                           Icons.grass_outlined,
-                          color: _muted,
+                          color: Color(0xFFA39DBF),
                           size: 32,
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
+                        SizedBox(height: 8),
+                        Text(
                           'O solo deste setor está em descanso.',
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: () => _createPlanting(sector),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Cadastrar plantação'),
-                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final planting in active)
+                          _plantingDetails(sector, planting),
                       ],
                     ),
             ),
+            if (widget.canManagePlantings &&
+                !_sectorHasOpenPlanting(sector)) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: () => _createPlanting(sector),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Cadastrar plantação'),
+                ),
+              ),
+            ] else if (widget.canManagePlantings) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Este setor já possui uma safra não concluída.',
+                style: TextStyle(color: Color(0xFFA39DBF)),
+              ),
+            ],
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: () => _showHistory(sector),
+                onPressed: () => _showHistory(sector, rows),
                 icon: const Icon(Icons.history),
                 label: const Text('Ver histórico produtivo'),
               ),
@@ -400,18 +334,158 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
       ),
     );
   }
+
+  Widget _plantingDetails(
+    Map<dynamic, dynamic> sector,
+    Map<dynamic, dynamic> planting,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(
+        displayValue(planting['cultura']),
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 8),
+      Text('Plantio: ${_displayDate(planting['dataPlantio'])}'),
+      Text(
+        'Colheita estimada: ${_displayDate(planting['dataColheitaEstimada'])}',
+      ),
+      Text('Situação: ${displayValue(planting['statusPlantio'])}'),
+      if (widget.canManagePlantings &&
+          planting['statusPlantio'] == 'EM_ANDAMENTO') ...[
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: () => _harvest(sector, planting),
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            foregroundColor: const Color(0xFF1B1938),
+            minimumSize: const Size(0, 48),
+          ),
+          child: const Text('Registrar colheita'),
+        ),
+      ],
+      const SizedBox(height: 8),
+    ],
+  );
+
+  void _showHistory(Map<String, dynamic> sector, List<Map> plantings) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Histórico • ${sector['nome'] ?? 'Setor'}'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: plantings.isEmpty
+                ? const Text('Nenhum plantio registrado neste setor.')
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final planting in plantings)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(displayValue(planting['cultura'])),
+                              subtitle: Text(
+                                'Plantio: ${_displayDate(planting['dataPlantio'])}\nColheita: ${_displayDate(planting['dataColheitaReal'])}\nSituação: ${displayValue(planting['statusPlantio'])}',
+                              ),
+                              isThreeLine: true,
+                            ),
+                            const Divider(),
+                          ],
+                        ),
+                    ],
+                  ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fechar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _harvest(
+    Map<dynamic, dynamic> sector,
+    Map<dynamic, dynamic> planting,
+  ) async {
+    final start = DateTime.tryParse(planting['dataPlantio']?.toString() ?? '');
+    if (start == null ||
+        planting['id'] == null ||
+        planting['cultura'] is! Map ||
+        (planting['cultura'] as Map)['id'] == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não é possível registrar a colheita: faltam dados do plantio.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    final today = DateUtils.dateOnly(DateTime.now());
+    if (start.isAfter(today)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A data de plantio está no futuro.')),
+      );
+      return;
+    }
+    final date = await showDatePicker(
+      context: context,
+      initialDate: today,
+      firstDate: DateUtils.dateOnly(start),
+      lastDate: today,
+      helpText: 'Data da colheita',
+    );
+    if (date == null || !mounted) return;
+    try {
+      await widget.api.request(
+        'PUT',
+        'plantio/${Uri.encodeComponent(planting['id'].toString())}',
+        body: {
+          'setor': {'id': sector['id']},
+          'cultura': {'id': (planting['cultura'] as Map)['id']},
+          'dataPlantio': planting['dataPlantio'],
+          'dataColheitaEstimada': planting['dataColheitaEstimada'],
+          'dataColheitaReal': _iso(date),
+          'statusPlantio': 'CONCLUIDO',
+        },
+      );
+      if (mounted) _refresh();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+}
+
+String _iso(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+
+String _displayDate(dynamic value) {
+  final date = DateTime.tryParse(value?.toString() ?? '');
+  if (date == null) return 'Não informado';
+  return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 }
 
 class _MessageCard extends StatelessWidget {
   const _MessageCard(this.message, {this.action});
   final String message;
   final Widget? action;
-
   @override
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
     child: Card(
-      color: _surface,
+      color: const Color(0xFF242144),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(children: [Text(message), ?action]),
@@ -424,7 +498,6 @@ class _StatusPill extends StatelessWidget {
   const _StatusPill(this.label, this.color);
   final String label;
   final Color color;
-
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
@@ -441,107 +514,135 @@ class _StatusPill extends StatelessWidget {
   );
 }
 
-class _DateButton extends StatelessWidget {
-  const _DateButton({required this.label, required this.onPressed});
+class _DateSelector extends StatelessWidget {
+  const _DateSelector({
+    required this.label,
+    required this.value,
+    required this.onPressed,
+    this.onClear,
+  });
+
   final String label;
+  final DateTime? value;
   final VoidCallback? onPressed;
+  final VoidCallback? onClear;
 
   @override
-  Widget build(BuildContext context) => OutlinedButton(
-    onPressed: onPressed,
-    child: Row(
-      children: [
-        const Icon(Icons.calendar_today, size: 20),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          alignment: Alignment.centerLeft,
+          side: const BorderSide(color: Color(0xFF57516C)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
-      ],
-    ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today_outlined, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFFA39DBF),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value == null ? 'Selecionar data' : _displayDate(value),
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right, size: 20),
+          ],
+        ),
+      ),
+      if (value != null && onClear != null)
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: onClear,
+            icon: const Icon(Icons.close, size: 16),
+            label: const Text('Limpar previsão'),
+          ),
+        ),
+    ],
   );
 }
 
 class _CreatePlantingDialog extends StatefulWidget {
   const _CreatePlantingDialog({
     required this.api,
-    required this.path,
-    required this.sectorName,
+    required this.sector,
+    required this.farmId,
   });
   final ApiClient api;
-  final String path;
-  final String sectorName;
+  final Map<String, dynamic> sector;
+  final String farmId;
 
   @override
   State<_CreatePlantingDialog> createState() => _CreatePlantingDialogState();
 }
 
 class _CreatePlantingDialogState extends State<_CreatePlantingDialog> {
-  List<Map<String, dynamic>> _cultures = [];
+  late Future<List<Map<String, dynamic>>> _cultures;
+  DateTime _date = DateUtils.dateOnly(DateTime.now());
+  DateTime? _estimated;
   String? _cultureId;
-  DateTime _plantingDate = DateTime.now();
-  DateTime? _estimatedDate;
-  bool _loading = true;
   bool _saving = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadCultures();
+    _cultures = widget.api.list('cultura');
   }
 
-  Future<void> _loadCultures() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final cultures = await widget.api.list('cultura');
-      if (mounted) {
-        setState(
-          () => _cultures = cultures.where((c) => c['id'] != null).toList(),
-        );
-      }
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
+  Future<void> _chooseDate({required bool estimated}) async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: estimated
+          ? (_estimated ?? _date.add(const Duration(days: 1)))
+          : _date,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(today.year + 100),
+      helpText: estimated ? 'Previsão de colheita' : 'Data de plantio',
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        if (estimated) {
+          _estimated = selected;
+        } else {
+          _date = selected;
+        }
+      });
     }
   }
 
-  Future<void> _pickDate({required bool estimated}) async {
-    final initial = estimated
-        ? (_estimatedDate ?? _plantingDate)
-        : _plantingDate;
-    final chosen = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(1900),
-      lastDate: estimated ? DateTime(2100) : DateTime.now(),
-    );
-    if (!mounted || chosen == null) return;
-    setState(() {
-      if (estimated) {
-        _estimatedDate = chosen;
-      } else {
-        _plantingDate = chosen;
-      }
-      _error = null;
-    });
-  }
-
   Future<void> _save() async {
+    if (_saving) return;
     final cultureId = int.tryParse(_cultureId ?? '');
     if (cultureId == null) {
-      setState(() => _error = 'Selecione a cultura.');
+      setState(() => _error = 'Selecione uma cultura.');
       return;
     }
-    if (_plantingDate.isAfter(DateTime.now())) {
-      setState(() => _error = 'A data do plantio não pode ser futura.');
-      return;
-    }
-    if (_estimatedDate != null && !_estimatedDate!.isAfter(_plantingDate)) {
-      setState(() => _error = 'A colheita estimada deve ser após o plantio.');
+    if (_estimated != null && !_estimated!.isAfter(_date)) {
+      setState(
+        () => _error = 'A previsão de colheita deve ser posterior ao plantio.',
+      );
       return;
     }
     setState(() {
@@ -549,17 +650,37 @@ class _CreatePlantingDialogState extends State<_CreatePlantingDialog> {
       _error = null;
     });
     try {
+      final cultures = await _cultures;
+      if (!cultures.any((culture) => culture['id']?.toString() == _cultureId)) {
+        throw const ApiFailure('Selecione uma cultura disponível.');
+      }
+      final sectors = await widget.api.list(
+        'setor/propriedade/${Uri.encodeComponent(widget.farmId)}',
+      );
+      final matching = sectors.where(
+        (sector) => sector['id']?.toString() == widget.sector['id'].toString(),
+      );
+      if (matching.length != 1) {
+        throw const ApiFailure('Não foi possível verificar este setor.');
+      }
+      if (_sectorHasOpenPlanting(matching.single)) {
+        throw const ApiFailure(
+          'Este setor já possui uma safra não concluída. Atualize a tela para consultar.',
+        );
+      }
       await widget.api.request(
         'POST',
-        widget.path,
+        'plantio',
         body: {
-          'culturaId': cultureId,
-          'dataPlantio': _iso(_plantingDate),
-          if (_estimatedDate != null)
-            'dataColheitaEstimada': _iso(_estimatedDate!),
+          'setor': {'id': widget.sector['id']},
+          'cultura': {'id': cultureId},
+          'dataPlantio': _iso(_date),
+          'dataColheitaEstimada': _estimated == null ? null : _iso(_estimated!),
+          'dataColheitaReal': null,
+          'statusPlantio': 'EM_ANDAMENTO',
         },
       );
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
@@ -571,341 +692,96 @@ class _CreatePlantingDialogState extends State<_CreatePlantingDialog> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_saving,
     child: AlertDialog(
-      title: Text('Cadastrar plantação — ${widget.sectorName}'),
+      title: const Text('Cadastrar plantação'),
       content: SizedBox(
-        width: 430,
+        width: 420,
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_loading) const LinearProgressIndicator(),
-              if (!_loading && _cultures.isEmpty && _error == null)
-                const Text(
-                  'Nenhuma cultura cadastrada. Solicite o cadastro no sistema web.',
-                ),
-              if (_cultures.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  initialValue: _cultureId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Cultura'),
-                  items: [
-                    for (final culture in _cultures)
-                      DropdownMenuItem(
-                        value: culture['id'].toString(),
-                        child: Text(
-                          _text(
-                            culture['nomePopular'],
-                            'Cultura #${culture['id']}',
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+          child: FutureBuilder<List<Map<String, dynamic>>>(
+            future: _cultures,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(snapshot.error.toString()),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _cultures = widget.api.list('cultura');
+                      }),
+                      child: const Text('Tentar novamente'),
+                    ),
                   ],
-                  onChanged: _saving
-                      ? null
-                      : (id) => setState(() => _cultureId = id),
-                ),
-              const SizedBox(height: 16),
-              _DateButton(
-                onPressed: _saving ? null : () => _pickDate(estimated: false),
-                label: 'Data do plantio: ${_date(_iso(_plantingDate))}',
-              ),
-              const SizedBox(height: 8),
-              _DateButton(
-                onPressed: _saving ? null : () => _pickDate(estimated: true),
-                label: _estimatedDate == null
-                    ? 'Informar colheita estimada (opcional)'
-                    : 'Colheita estimada: ${_date(_iso(_estimatedDate!))}',
-              ),
-              if (_estimatedDate != null)
-                TextButton(
-                  onPressed: _saving
-                      ? null
-                      : () => setState(() => _estimatedDate = null),
-                  child: const Text('Limpar data estimada'),
-                ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.redAccent),
+                );
+              }
+              final cultures = (snapshot.data ?? [])
+                  .where((culture) => culture['id'] != null)
+                  .toList();
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Setor: ${displayValue(widget.sector['nome'])}'),
+                  if (cultures.isEmpty)
+                    const Text('Nenhuma cultura cadastrada no sistema.')
+                  else
+                    DropdownButtonFormField<String>(
+                      initialValue: _cultureId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Cultura'),
+                      items: [
+                        for (final culture in cultures)
+                          DropdownMenuItem(
+                            value: culture['id'].toString(),
+                            child: Text(
+                              displayValue(culture),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: _saving
+                          ? null
+                          : (value) => setState(() => _cultureId = value),
+                    ),
+                  const SizedBox(height: 20),
+                  _DateSelector(
+                    label: 'Data de plantio',
+                    value: _date,
+                    onPressed: _saving
+                        ? null
+                        : () => _chooseDate(estimated: false),
                   ),
-                ),
-                if (!_loading && _cultures.isEmpty)
-                  TextButton.icon(
-                    onPressed: _loadCultures,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Tentar novamente'),
+                  const SizedBox(height: 12),
+                  _DateSelector(
+                    label: 'Previsão de colheita (opcional)',
+                    value: _estimated,
+                    onPressed: _saving
+                        ? null
+                        : () => _chooseDate(estimated: true),
+                    onClear: _saving
+                        ? null
+                        : () => setState(() => _estimated = null),
                   ),
-              ],
-            ],
+                  if (_error != null)
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                ],
+              );
+            },
           ),
         ),
       ),
       actions: [
         TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: _loading || _saving || _cultures.isEmpty ? null : _save,
-          child: Text(_saving ? 'Salvando...' : 'Confirmar plantio'),
-        ),
-      ],
-    ),
-  );
-}
-
-class _HarvestDialog extends StatefulWidget {
-  const _HarvestDialog({
-    required this.api,
-    required this.path,
-    required this.cultureName,
-    required this.plantingDate,
-  });
-  final ApiClient api;
-  final String path;
-  final String cultureName;
-  final DateTime? plantingDate;
-
-  @override
-  State<_HarvestDialog> createState() => _HarvestDialogState();
-}
-
-class _HarvestDialogState extends State<_HarvestDialog> {
-  DateTime _harvestDate = DateTime.now();
-  bool _saving = false;
-  String? _error;
-
-  Future<void> _pickDate() async {
-    final today = DateTime.now();
-    if (widget.plantingDate != null && widget.plantingDate!.isAfter(today)) {
-      setState(() => _error = 'O plantio ainda não pode ser colhido.');
-      return;
-    }
-    final chosen = await showDatePicker(
-      context: context,
-      initialDate: _harvestDate,
-      firstDate: widget.plantingDate ?? DateTime(1900),
-      lastDate: today,
-    );
-    if (mounted && chosen != null) setState(() => _harvestDate = chosen);
-  }
-
-  Future<void> _save() async {
-    if (widget.plantingDate != null &&
-        _harvestDate.isBefore(widget.plantingDate!)) {
-      setState(() => _error = 'A colheita não pode anteceder o plantio.');
-      return;
-    }
-    if (_harvestDate.isAfter(DateTime.now())) {
-      setState(() => _error = 'A data da colheita não pode ser futura.');
-      return;
-    }
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      await widget.api.request(
-        'POST',
-        widget.path,
-        body: {'dataColheita': _iso(_harvestDate)},
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_saving,
-    child: AlertDialog(
-      title: const Text('Registrar colheita'),
-      content: SizedBox(
-        width: 430,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Cultura: ${widget.cultureName}'),
-              const SizedBox(height: 16),
-              _DateButton(
-                onPressed: _saving ? null : _pickDate,
-                label: 'Data da colheita: ${_date(_iso(_harvestDate))}',
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.redAccent),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          onPressed: _saving ? null : () => Navigator.pop(context),
           child: const Text('Cancelar'),
         ),
         FilledButton(
           onPressed: _saving ? null : _save,
-          child: Text(_saving ? 'Salvando...' : 'Confirmar colheita'),
+          child: Text(_saving ? 'Salvando…' : 'Salvar'),
         ),
       ],
-    ),
-  );
-}
-
-class _HistoryDialog extends StatefulWidget {
-  const _HistoryDialog({
-    required this.api,
-    required this.path,
-    required this.sectorName,
-  });
-  final ApiClient api;
-  final String path;
-  final String sectorName;
-
-  @override
-  State<_HistoryDialog> createState() => _HistoryDialogState();
-}
-
-class _HistoryDialogState extends State<_HistoryDialog> {
-  List<Map<String, dynamic>> _rows = [];
-  String? _error;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final rows = await widget.api.list(widget.path);
-      if (mounted) setState(() => _rows = rows);
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Dialog(
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 820, maxHeight: 620),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.sectorName,
-                    style: const TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Fechar histórico',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            if (!_loading && _error == null)
-              Text(
-                'Total de plantios: ${_rows.length}',
-                style: const TextStyle(color: _muted),
-              ),
-            const SizedBox(height: 14),
-            if (_loading) const LinearProgressIndicator(),
-            if (_error != null)
-              _MessageCard(
-                _error!,
-                action: TextButton(
-                  onPressed: _load,
-                  child: const Text('Tentar novamente'),
-                ),
-              ),
-            if (!_loading && _error == null)
-              Expanded(
-                child: _rows.isEmpty
-                    ? const Center(
-                        child: Text('Nenhum plantio registrado neste setor.'),
-                      )
-                    : ListView.separated(
-                        itemCount: _rows.length,
-                        separatorBuilder: (_, _) => const Divider(),
-                        itemBuilder: (context, index) {
-                          final row = _rows[index];
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        _text(row['culturaNome']),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 17,
-                                        ),
-                                      ),
-                                    ),
-                                    _StatusPill(
-                                      displayValue(row['statusPlantio']),
-                                      row['statusPlantio'] == 'CONCLUIDO'
-                                          ? _green
-                                          : _cyan,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Setor: ${_text(row['setorNome'], widget.sectorName)}',
-                                ),
-                                Text('Plantio: ${_date(row['dataPlantio'])}'),
-                                Text(
-                                  'Colheita estimada: ${_date(row['dataColheitaEstimada'])}',
-                                ),
-                                Text(
-                                  'Colheita real: ${_date(row['dataColheita'])}',
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-          ],
-        ),
-      ),
     ),
   );
 }

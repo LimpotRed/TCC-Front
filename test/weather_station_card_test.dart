@@ -23,7 +23,7 @@ const _station = <String, dynamic>{
   'longitude': '-50,041060',
 };
 
-http.Response _jsonResponse(Object body, [int status = 200]) => http.Response(
+http.Response _jsonResponse(Object? body, [int status = 200]) => http.Response(
   jsonEncode(body),
   status,
   headers: {'content-type': 'application/json; charset=utf-8'},
@@ -82,7 +82,7 @@ void main() {
     final api = ApiClient(
       client: MockClient((request) async {
         backendRequests++;
-        return _jsonResponse([_station]);
+        return _jsonResponse(_station);
       }),
     );
     final service = OpenMeteoService(
@@ -132,8 +132,8 @@ void main() {
           expect(request.method, 'GET');
           expect(request.headers['Authorization'], 'Bearer sessão-teste');
           backendRequests++;
-          expect(request.url.path, '/propriedade/1/estacoes');
-          return _jsonResponse([_station]);
+          expect(request.url.path, '/estacaoMetereologica/propriedade/1');
+          return _jsonResponse(_station);
         }),
       )..token = 'sessão-teste';
       final service = OpenMeteoService(
@@ -199,8 +199,8 @@ void main() {
         var weatherRequests = 0;
         final api = ApiClient(
           client: MockClient((request) async {
-            expect(request.url.path, '/propriedade/1/estacoes');
-            return _jsonResponse(stations);
+            expect(request.url.path, '/estacaoMetereologica/propriedade/1');
+            return _jsonResponse(stations.firstOrNull);
           }),
         );
         final service = OpenMeteoService(
@@ -228,16 +228,18 @@ void main() {
     );
   }
 
-  testWidgets('Usa a primeira estação válida e aceita coordenadas numéricas', (
+  testWidgets('Usa a estação retornada e aceita coordenadas numéricas', (
     tester,
   ) async {
     final api = ApiClient(
       client: MockClient((request) async {
-        expect(request.url.path, '/propriedade/1/estacoes');
-        return _jsonResponse([
-          {'id': 1, 'nome': 'Sem posição'},
-          {..._station, 'id': 2, 'latitude': -23.5, 'longitude': -46.6},
-        ]);
+        expect(request.url.path, '/estacaoMetereologica/propriedade/1');
+        return _jsonResponse({
+          ..._station,
+          'id': 2,
+          'latitude': -23.5,
+          'longitude': -46.6,
+        });
       }),
     );
     final service = OpenMeteoService(
@@ -263,11 +265,11 @@ void main() {
     var weatherRequests = 0;
     final api = ApiClient(
       client: MockClient((request) async {
-        expect(request.url.path, '/propriedade/1/estacoes');
+        expect(request.url.path, '/estacaoMetereologica/propriedade/1');
         backendRequests++;
         return backendRequests == 1
             ? _jsonResponse({'message': 'Servidor indisponível.'}, 503)
-            : _jsonResponse([_station]);
+            : _jsonResponse(_station);
       }),
     );
     final service = OpenMeteoService(
@@ -298,8 +300,8 @@ void main() {
     var weatherRequests = 0;
     final api = ApiClient(
       client: MockClient((request) async {
-        expect(request.url.path, '/propriedade/1/estacoes');
-        return _jsonResponse([_station]);
+        expect(request.url.path, '/estacaoMetereologica/propriedade/1');
+        return _jsonResponse(_station);
       }),
     );
     final service = OpenMeteoService(
@@ -329,8 +331,8 @@ void main() {
   ) async {
     final api = ApiClient(
       client: MockClient((request) async {
-        expect(request.url.path, '/propriedade/1/estacoes');
-        return _jsonResponse([_station]);
+        expect(request.url.path, '/estacaoMetereologica/propriedade/1');
+        return _jsonResponse(_station);
       }),
     );
     final service = OpenMeteoService(
@@ -362,20 +364,21 @@ void main() {
         expect(request.method, 'GET');
         expect(
           request.url.path,
-          anyOf('/propriedade/1/estacoes', '/propriedade/2/estacoes'),
+          anyOf(
+            '/estacaoMetereologica/propriedade/1',
+            '/estacaoMetereologica/propriedade/2',
+          ),
         );
         return _jsonResponse(
-          request.url.path == '/propriedade/2/estacoes'
-              ? [
-                  {
-                    ..._station,
-                    'id': 2,
-                    'nome': 'Estação sul',
-                    'latitude': -23.5,
-                    'longitude': -46.6,
-                  },
-                ]
-              : [_station],
+          request.url.path == '/estacaoMetereologica/propriedade/2'
+              ? {
+                  ..._station,
+                  'id': 2,
+                  'nome': 'Estação sul',
+                  'latitude': -23.5,
+                  'longitude': -46.6,
+                }
+              : _station,
         );
       }),
     );
@@ -435,8 +438,8 @@ void main() {
         client: MockClient((request) async {
           expect(request.method, 'GET');
           backendRequests++;
-          expect(request.url.path, '/propriedade/1/estacoes');
-          return _jsonResponse([]);
+          expect(request.url.path, '/estacaoMetereologica/propriedade/1');
+          return _jsonResponse(null);
         }),
       );
       final service = OpenMeteoService(

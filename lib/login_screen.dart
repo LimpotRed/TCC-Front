@@ -21,7 +21,6 @@ class _LoginScreenState extends State<LoginScreen> {
   late final AuthService _auth = widget.auth ?? AuthService();
   // A chave valida o formulário; os controllers guardam o texto dos campos.
   final _form = GlobalKey<FormState>();
-  final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
@@ -34,12 +33,11 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _notice;
 
   bool get _isLogin => _mode == _AuthMode.login;
-  bool get _isRegister => _mode == _AuthMode.register;
 
   @override
   void dispose() {
     // Libera os campos da memória ao fechar a tela.
-    for (final controller in [_name, _email, _password, _confirm]) {
+    for (final controller in [_email, _password, _confirm]) {
       controller.dispose();
     }
     super.dispose();
@@ -102,11 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
           (_) => false,
         );
       } else {
-        await _auth.register(
-          name: _name.text,
-          email: _email.text,
-          password: _password.text,
-        );
+        await _auth.register(email: _email.text, password: _password.text);
         if (!mounted) return;
         setState(() => _busy = false);
         _changeMode(_AuthMode.login);
@@ -233,7 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 Text(
                                   _isLogin
                                       ? 'Entre com seu e-mail e senha.'
-                                      : 'Preencha seus dados para começar.',
+                                      : 'Informe e-mail e senha. O nome será configurado no sistema de gestão.',
                                 ),
                                 const SizedBox(height: 24),
                                 if (_error != null || _notice != null) ...[
@@ -247,22 +241,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                             : Colors.green.shade800,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-                                if (_isRegister) ...[
-                                  TextFormField(
-                                    key: const ValueKey('name'),
-                                    controller: _name,
-                                    textCapitalization:
-                                        TextCapitalization.words,
-                                    textInputAction: TextInputAction.next,
-                                    autofillHints: const [AutofillHints.name],
-                                    decoration: _decoration(
-                                      'Nome',
-                                      Icons.person_outline,
-                                    ),
-                                    validator: validateName,
                                   ),
                                   const SizedBox(height: 16),
                                 ],

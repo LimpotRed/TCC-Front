@@ -15,51 +15,61 @@ http.Response jsonResponse(Object data, [int status = 200]) => http.Response(
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
 
+String testToken(String role) =>
+    'header.${base64Url.encode(utf8.encode(jsonEncode({'sub': 'lucas@example.com', 'nome': 'Lucas', 'role': role}))).replaceAll('=', '')}.signature';
+
 void main() {
-  test(
-    'Cadastro envia nome e senha à API; login usa JWT e perfil do servidor',
-    () async {
-      final requests = <http.Request>[];
-      final auth = AuthService(
-        api: ApiClient(
-          client: MockClient((r) async {
-            requests.add(r);
-            if (r.url.path == '/auth/register') {
-              return jsonResponse({'message': 'Criado'});
-            }
-            if (r.url.path == '/auth/login') {
-              return jsonResponse({'token': 'test-token'});
-            }
-            expect(r.headers['Authorization'], 'Bearer test-token');
-            return jsonResponse({
-              'nome': 'Lucas',
-              'email': 'lucas@example.com',
-              'role': 'TECNICO',
-            });
-          }),
+  test('Cadastro envia contrato atual; login lê perfil do JWT', () async {
+    final requests = <http.Request>[];
+    final auth = AuthService(
+      api: ApiClient(
+        client: MockClient((r) async {
+          requests.add(r);
+          if (r.url.path == '/auth/register') {
+            return jsonResponse({'message': 'Criado'});
+          }
+          if (r.url.path == '/auth/login') {
+            return jsonResponse({'token': testToken('TECNICO')});
+          }
+          expect(r.headers['Authorization'], 'Bearer test-token');
+          return jsonResponse({
+            'nome': 'Lucas',
+            'email': 'lucas@example.com',
+            'role': 'TECNICO',
+          });
+        }),
+      ),
+    );
+    await auth.register(email: ' LUCAS@example.com ', password: 'senha12345');
+    expect(jsonDecode(requests.first.body), {
+      'email': 'lucas@example.com',
+      'senha': 'senha12345',
+      'role': 'PRODUTOR',
+    });
+    expect(
+      await auth.signIn(email: 'lucas@example.com', password: 'senha12345'),
+      'Lucas',
+    );
+    expect(auth.canManage, isTrue);
+    expect(auth.canManagePlantings, isTrue);
+    auth.signOut();
+    expect(auth.api.token, isNull);
+    expect(auth.profile, isNull);
+  });
+  test('Produtor pode gerenciar plantios sem acesso de equipe', () async {
+    final auth = AuthService(
+      api: ApiClient(
+        client: MockClient(
+          (_) async => jsonResponse({'token': testToken('PRODUTOR')}),
         ),
-      );
-      await auth.register(
-        name: 'Lucas',
-        email: ' LUCAS@example.com ',
-        password: 'senha12345',
-      );
-      expect(jsonDecode(requests.first.body), {
-        'nome': 'Lucas',
-        'email': 'lucas@example.com',
-        'senha': 'senha12345',
-        'role': 'PRODUTOR',
-      });
-      expect(
-        await auth.signIn(email: 'lucas@example.com', password: 'senha12345'),
-        'Lucas',
-      );
-      expect(auth.canManage, isTrue);
-      auth.signOut();
-      expect(auth.api.token, isNull);
-      expect(auth.profile, isNull);
-    },
-  );
+      ),
+    );
+    await auth.signIn(email: 'lucas@example.com', password: 'senha12345');
+    expect(auth.canManage, isFalse);
+    expect(auth.canManagePlantings, isTrue);
+    auth.signOut();
+    expect(auth.canManagePlantings, isFalse);
+  });
   test('Erro de login não cria sessão nem ignora falha no perfil', () async {
     final auth = AuthService(
       api: ApiClient(
@@ -98,28 +108,25 @@ void main() {
       expect(api.token, isNull);
     },
   );
-  test(
-    'Erro de rede é compreensível e resposta vazia de DELETE é aceita',
-    () async {
-      final offline = ApiClient(
-        client: MockClient((_) async => throw http.ClientException('offline')),
-      );
-      await expectLater(
-        offline.list('sensor'),
-        throwsA(
-          isA<ApiFailure>().having(
-            (e) => e.message,
-            'message',
-            contains('conectar'),
-          ),
+  test('Erro de rede é compreensível e resposta vazia é aceita', () async {
+    final offline = ApiClient(
+      client: MockClient((_) async => throw http.ClientException('offline')),
+    );
+    await expectLater(
+      offline.list('sensor'),
+      throwsA(
+        isA<ApiFailure>().having(
+          (e) => e.message,
+          'message',
+          contains('conectar'),
         ),
-      );
-      final api = ApiClient(
-        client: MockClient((r) async => http.Response('', 204)),
-      );
-      expect(await api.request('DELETE', 'sensor/1/'), isNull);
-    },
-  );
+      ),
+    );
+    final api = ApiClient(
+      client: MockClient((r) async => http.Response('', 204)),
+    );
+    expect(await api.request('GET', 'sensor'), isNull);
+  });
   testWidgets('Cadastro, validação, erro do servidor e entrada no painel', (
     tester,
   ) async {
@@ -137,14 +144,7 @@ void main() {
                 'message': 'E-mail ou senha incorretos.',
               }, 401);
             }
-            return jsonResponse({'token': 'token'});
-          }
-          if (r.url.path == '/auth/me') {
-            return jsonResponse({
-              'nome': 'Lucas',
-              'email': 'lucas@example.com',
-              'role': 'PRODUTOR',
-            });
+            return jsonResponse({'token': testToken('PRODUTOR')});
           }
           return jsonResponse([]);
         }),
@@ -154,7 +154,6 @@ void main() {
     await tester.ensureVisible(find.text('Crie agora'));
     await tester.tap(find.text('Crie agora'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('name')), 'Lucas');
     await tester.enterText(
       find.byKey(const ValueKey('email')),
       'lucas@example.com',

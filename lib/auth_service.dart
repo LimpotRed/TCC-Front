@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'api_client.dart';
 import 'auth_validation.dart';
 export 'api_client.dart' show ApiFailure;
@@ -7,21 +9,18 @@ class AuthService {
   final ApiClient api;
   Map<String, dynamic>? profile;
   bool get canManage => ['ADMIN', 'TECNICO'].contains(profile?['role']);
+  bool get canManagePlantings =>
+      ['ADMIN', 'TECNICO', 'PRODUTOR'].contains(profile?['role']);
   Future<void> register({
-    required String name,
     required String email,
     required String password,
   }) async {
-    final error =
-        validateName(name) ??
-        validateEmail(email) ??
-        validateNewPassword(password);
+    final error = validateEmail(email) ?? validateNewPassword(password);
     if (error != null) throw ApiFailure(error);
     await api.request(
       'POST',
       'auth/register',
       body: {
-        'nome': name.trim(),
         'email': email.trim().toLowerCase(),
         'senha': password,
         'role': 'PRODUTOR',
@@ -41,26 +40,30 @@ class AuthService {
     if (response is! Map || response['token'] is! String) {
       throw const ApiFailure('Resposta de autenticação inválida.');
     }
-    api.token = response['token'] as String;
+    final token = response['token'] as String;
     try {
-      profile = Map<String, dynamic>.from(
-        await api.request('GET', 'auth/me') as Map,
+      final parts = token.split('.');
+      if (parts.length != 3) throw const FormatException();
+      final claims = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
       );
+      if (claims is! Map ||
+          claims['sub'] is! String ||
+          claims['role'] is! String) {
+        throw const FormatException();
+      }
+      final name = claims['nome'];
+      profile = {
+        'nome': name is String && name.trim().isNotEmpty ? name : claims['sub'],
+        'email': claims['sub'],
+        'role': claims['role'],
+      };
+      api.token = token;
       return profile!['nome'] as String;
     } catch (_) {
       signOut();
-      rethrow;
+      throw const ApiFailure('Resposta de autenticação inválida.');
     }
-  }
-
-  Future<void> updateProfile(String name, String cpf) async {
-    profile = Map<String, dynamic>.from(
-      await api.request(
-        'PUT',
-        'auth/me',
-        body: {'nome': name.trim(), 'cpf': cpf},
-      ) as Map,
-    );
   }
 
   void signOut() {

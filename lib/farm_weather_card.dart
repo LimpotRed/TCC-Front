@@ -118,15 +118,17 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
     });
     widget.onFarmChanged?.call(farm.id);
     try {
-      final rows = await widget.api.list(
-        'propriedade/${Uri.encodeComponent(farm.id)}/estacoes',
+      final station = await widget.api.request(
+        'GET',
+        'estacaoMetereologica/propriedade/${Uri.encodeComponent(farm.id)}',
       );
       if (!mounted || generation != _generation) return;
-      _StationLocation? reference;
-      for (final row in rows) {
-        reference = _StationLocation.fromRow(row);
-        if (reference != null) break;
+      if (station != null && station is! Map) {
+        throw const ApiFailure('O servidor retornou uma estação inválida.');
       }
+      final reference = station == null
+          ? null
+          : _StationLocation.fromRow(Map<String, dynamic>.from(station as Map));
       setState(() {
         _reference = reference;
         _referenceLoaded = true;

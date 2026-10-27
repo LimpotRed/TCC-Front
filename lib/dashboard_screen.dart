@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +10,7 @@ import 'open_meteo_service.dart';
 import 'resource_schema.dart';
 import 'resource_screen.dart';
 import 'farm_weather_card.dart';
+import 'profile_photo_service.dart';
 
 const _background = Color(0xFF15142F);
 const _surface = Color(0xFF242144);
@@ -24,11 +26,13 @@ class DashboardScreen extends StatefulWidget {
     required this.email,
     required this.onLogout,
     this.weatherService,
+    this.photoService,
   });
   final AuthService auth;
   final String name, email;
   final void Function(BuildContext) onLogout;
   final OpenMeteoService? weatherService;
+  final ProfilePhotoService? photoService;
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
@@ -45,6 +49,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _farmSectorsError;
   int _farmSectorsGeneration = 0;
   int _dataGeneration = 0;
+  late final ProfilePhotoService _photoService =
+      widget.photoService ?? ProfilePhotoService();
+  Uint8List? _photo;
+  bool _photoBusy = false;
+  int _photoGeneration = 0;
   @override
   void initState() {
     super.initState();
@@ -52,7 +61,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) widget.onLogout(context);
     };
     _load();
+    _loadPhoto();
   }
+
+  Future<void> _loadPhoto() async {
+    final generation = _photoGeneration;
+    try {
+      final photo = await _photoService.load(widget.email);
+      if (mounted && generation == _photoGeneration) {
+        setState(() => _photo = photo);
+      }
+    } catch (_) {
+      // O perfil permanece utilizável quando o armazenamento local falha.
+    }
+  }
+
+  Future<void> _choosePhoto() async {
+    if (_photoBusy) return;
+    _photoGeneration++;
+    setState(() => _photoBusy = true);
+    try {
+      final photo = await _photoService.chooseAndSave(widget.email);
+      if (mounted && photo != null) setState(() => _photo = photo);
+    } catch (error) {
+      if (mounted) {
+        final message = error is ProfilePhotoFailure
+            ? error.message
+            : 'Não foi possível salvar a foto neste dispositivo.';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
+  Future<void> _removePhoto() async {
+    if (_photoBusy) return;
+    _photoGeneration++;
+    setState(() => _photoBusy = true);
+    try {
+      await _photoService.remove(widget.email);
+      if (mounted) setState(() => _photo = null);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível remover a foto.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
+  Widget _avatar(String name, {double radius = 26}) => CircleAvatar(
+    backgroundColor: _surface,
+    radius: radius,
+    backgroundImage: _photo == null ? null : MemoryImage(_photo!),
+    child: _photo == null
+        ? Text(
+            name.isEmpty ? 'G' : name.characters.first.toUpperCase(),
+            style: const TextStyle(color: _cyan),
+          )
+        : null,
+  );
 
   @override
   void dispose() {
@@ -123,7 +195,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
     try {
       final sectors = await widget.auth.api.list(
-        'propriedade/${Uri.encodeComponent(id)}/safras/setores',
+        'setor/propriedade/${Uri.encodeComponent(id)}',
       );
       if (mounted && generation == _farmSectorsGeneration) {
         setState(() => _farmSectors = sectors);
@@ -156,7 +228,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (_) => ResourceScreen(
           api: widget.auth.api,
           spec: spec,
-          canManage: widget.auth.canManage,
           header: spec.path == 'leituraClimatica'
               ? FarmWeatherCard(
                   api: widget.auth.api,
@@ -178,6 +249,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (_) => FarmPlantingScreen(
           api: widget.auth.api,
           farms: rows('propriedade'),
+          canManagePlantings: widget.auth.canManagePlantings,
           selectedFarmId: _selectedFarmId,
           onFarmChanged: _selectFarm,
         ),
@@ -245,16 +317,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          backgroundColor: _surface,
-                          radius: 26,
-                          child: Text(
-                            name.isEmpty
-                                ? 'G'
-                                : name.characters.first.toUpperCase(),
-                            style: const TextStyle(color: _cyan),
-                          ),
-                        ),
+                        _avatar(name),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
@@ -467,7 +530,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   'Plantios em andamento',
                   _farmSectorsBusy || _farmSectorsError != null
                       ? '--'
-                      : '${_farmSectors.where((s) => s['plantioAtivo'] is Map && (s['plantioAtivo'] as Map)['statusPlantio'] == 'EM_ANDAMENTO').length}',
+                      : '${_farmSectors.expand((s) => s['plantios'] is List ? s['plantios'] as List : const []).where((p) => p is Map && p['statusPlantio'] == 'EM_ANDAMENTO').length}',
                   Icons.grass,
                   'plantio',
                   width: cardWidth,
@@ -494,7 +557,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Não foi possível carregar as safras desta fazenda.',
+                    'Não foi possível carregar os setores desta fazenda.',
                   ),
                   const SizedBox(height: 8),
                   TextButton(
@@ -728,6 +791,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: TextStyle(fontSize: 26, color: Colors.white),
         ),
         const SizedBox(height: 24),
+        Center(child: _avatar(name, radius: 48)),
+        const SizedBox(height: 12),
+        Center(
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            children: [
+              TextButton.icon(
+                onPressed: _photoBusy ? null : _choosePhoto,
+                icon: const Icon(Icons.add_a_photo_outlined),
+                label: Text(_photo == null ? 'Adicionar foto' : 'Alterar foto'),
+              ),
+              if (_photo != null)
+                TextButton(
+                  onPressed: _photoBusy ? null : _removePhoto,
+                  child: const Text('Remover foto'),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
         const Text('Nome', style: TextStyle(color: _muted)),
         Text(name, style: const TextStyle(fontSize: 18)),
         const SizedBox(height: 20),
@@ -736,21 +820,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 20),
         const Text('Perfil de acesso', style: TextStyle(color: _muted)),
         Text(displayValue(widget.auth.profile?['role'])),
-        const SizedBox(height: 20),
-        const Text('CPF', style: TextStyle(color: _muted)),
-        Text(displayValue(widget.auth.profile?['cpf'])),
         const SizedBox(height: 24),
-        FilledButton.icon(
-          onPressed: () async {
-            final changed = await Navigator.of(context).push<bool>(
-              MaterialPageRoute(
-                builder: (_) => _ProfileEditor(auth: widget.auth),
-              ),
-            );
-            if (changed == true && mounted) setState(() {});
-          },
-          icon: const Icon(Icons.edit_outlined),
-          label: const Text('Editar perfil'),
+        const Text(
+          'Os dados do perfil são somente para consulta.',
+          style: TextStyle(color: _muted),
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -931,92 +1004,4 @@ class _ActivityRing extends CustomPainter {
   @override
   bool shouldRepaint(_ActivityRing oldDelegate) =>
       fraction != oldDelegate.fraction;
-}
-
-class _ProfileEditor extends StatefulWidget {
-  const _ProfileEditor({required this.auth});
-  final AuthService auth;
-  @override
-  State<_ProfileEditor> createState() => _ProfileEditorState();
-}
-
-class _ProfileEditorState extends State<_ProfileEditor> {
-  late final _name = TextEditingController(
-    text: widget.auth.profile?['nome'] as String?,
-  );
-  late final _cpf = TextEditingController(
-    text: widget.auth.profile?['cpf'] as String?,
-  );
-  final _form = GlobalKey<FormState>();
-  bool _saving = false;
-  String? _error;
-  @override
-  void dispose() {
-    _name.dispose();
-    _cpf.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      await widget.auth.updateProfile(_name.text, _cpf.text);
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_saving,
-    child: Scaffold(
-      appBar: AppBar(title: const Text('Editar perfil')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: Form(
-            key: _form,
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                TextFormField(
-                  controller: _name,
-                  enabled: !_saving,
-                  decoration: const InputDecoration(labelText: 'Nome'),
-                  validator: (value) => (value?.trim().length ?? 0) < 2
-                      ? 'Informe seu nome.'
-                      : null,
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _cpf,
-                  enabled: !_saving,
-                  decoration: const InputDecoration(
-                    labelText: 'CPF (opcional)',
-                  ),
-                ),
-                const SizedBox(height: 24),
-                if (_error != null)
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: Color(0xFFFFB4AB)),
-                  ),
-                FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: Text(_saving ? 'Salvando…' : 'Salvar perfil'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 }
