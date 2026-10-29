@@ -1,260 +1,170 @@
-# 🌱 GHydro — Sistema Inteligente de Gestão Agrícola
+# 🌱 GHydro — Aplicativo Mobile Flutter
 
-### Monitoramento de umidade do solo, gerenciamento de propriedades rurais e acompanhamento de plantios.
+O **GHydro** é um sistema de gestão e monitoramento agrícola desenvolvido como Trabalho de Conclusão de Curso (TCC) em Engenharia de Software. Seu objetivo é facilitar o acompanhamento de propriedades rurais por meio da tecnologia, permitindo o monitoramento da umidade do solo, das condições climáticas e dos ciclos de produção agrícola.
 
-O **GHydro** é uma solução tecnológica desenvolvida como Trabalho de Conclusão de Curso (TCC) em Engenharia de Software, com o objetivo de modernizar a gestão agrícola por meio da integração entre **Internet das Coisas (IoT), desenvolvimento mobile, APIs REST e banco de dados relacional**.
+O projeto utiliza uma arquitetura integrada, composta por:
 
-O sistema foi idealizado para auxiliar produtores rurais no acompanhamento de suas propriedades, oferecendo acesso a informações sobre umidade do solo, condições climáticas, setores de cultivo, plantios e histórico produtivo.
+- **Backend:** desenvolvido em Java com Spring Boot, responsável pelas regras de negócio, autenticação e comunicação com o banco de dados.
+- **Banco de dados:** PostgreSQL, utilizado para armazenar informações de usuários, propriedades, setores, sensores, plantios e colheitas.
+- **Sistema Web:** responsável pelo gerenciamento e cadastro das informações, como propriedades rurais, setores, usuários e demais registros administrativos.
+- **Aplicativo Mobile:** desenvolvido em Flutter e Dart, voltado principalmente à visualização e análise dos dados agrícolas, além do cadastro de plantios e registro de colheitas.
 
-A proposta é transformar dados coletados no campo em informações acessíveis, contribuindo para uma gestão mais organizada e para decisões agrícolas baseadas em dados.
+> **Importante:** este repositório contém somente o código-fonte do frontend Flutter. O backend Java, o banco de dados PostgreSQL e o sistema web fazem parte da solução completa, mas são componentes separados.
 
 ---
 
-## 🎯 Objetivo do projeto
+## 📱 Como funciona o aplicativo
 
-A agricultura depende de fatores como umidade do solo, condições climáticas e acompanhamento adequado dos ciclos de cultivo.
+O aplicativo mobile foi desenvolvido para oferecer aos produtores rurais uma maneira prática de acompanhar suas propriedades sem depender diretamente do sistema web.
 
-O GHydro busca facilitar esse processo por meio de uma plataforma que centraliza as informações da propriedade rural e permite ao produtor acompanhar seus dados de maneira prática.
+Enquanto o sistema web concentra os cadastros e as operações administrativas, o aplicativo Flutter funciona como uma interface de consulta e acompanhamento das informações coletadas e armazenadas pelo sistema.
 
-Entre os principais objetivos estão:
+No mobile, as principais operações de cadastro são o **registro de novos plantios e a conclusão de colheitas**.
 
-- Facilitar o monitoramento das condições do solo por meio de sensores IoT.
-- Centralizar informações sobre propriedades, setores e plantios.
-- Permitir o acompanhamento do ciclo produtivo, desde o cadastro do plantio até a colheita.
-- Disponibilizar informações meteorológicas para auxiliar o planejamento agrícola.
-- Organizar o histórico produtivo das propriedades.
-- Garantir que cada usuário acesse os dados de acordo com suas permissões.
+### 🔐 Autenticação
 
-## 📱 Funcionalidades do aplicativo
+O aplicativo realiza a autenticação dos usuários através da API REST do GHydro, utilizando tokens JWT para identificar o usuário e controlar o acesso às informações.
 
-### 🔐 Autenticação e controle de acesso
+Cada produtor tem acesso às propriedades e aos dados disponibilizados conforme suas permissões no backend.
 
-O aplicativo possui integração com uma API de autenticação baseada em JWT (JSON Web Token).
+### 🚜 Propriedades e setores
 
-O sistema permite o login de usuários, cadastro de produtores e acesso às funcionalidades conforme os perfis e permissões estabelecidos pelo backend.
+O aplicativo apresenta as propriedades vinculadas ao usuário e seus respectivos setores.
 
-### 🚜 Gerenciamento de propriedades rurais
+Os cadastros e a organização dos setores são realizados pelo sistema web. O aplicativo consulta essas informações diretamente na API e permite visualizar os plantios associados a cada setor.
 
-Os usuários podem consultar as propriedades vinculadas à sua conta, visualizar os setores cadastrados e acompanhar os plantios associados a cada área.
+### 🌾 Plantios e colheitas
 
-O aplicativo consome as informações fornecidas pela API, mantendo a integração entre os dados disponíveis no ambiente web e no dispositivo mobile.
+Essa é a principal funcionalidade operacional do aplicativo mobile.
 
-### 🌾 Controle de plantios e colheitas
+O produtor pode:
 
-O GHydro permite acompanhar o ciclo de produção agrícola, incluindo:
+- Consultar os plantios em andamento.
+- Visualizar os setores disponíveis para cultivo.
+- Cadastrar um novo plantio em um setor disponível.
+- Registrar a conclusão de uma colheita.
+- Consultar o histórico produtivo dos setores.
 
-- Visualização dos setores de cultivo.
-- Consulta aos plantios ativos.
-- Cadastro de novos plantios em setores disponíveis.
-- Registro de colheitas.
-- Atualização do status dos plantios.
-- Consulta ao histórico produtivo.
+Cada setor permite apenas um plantio não concluído por vez, conforme a validação implementada no aplicativo.
 
-O aplicativo também implementa validações para evitar o cadastro de múltiplos plantios ativos no mesmo setor.
+Ao cadastrar um plantio, seu status é definido como `EM_ANDAMENTO`. Quando a colheita é registrada, o status passa para `CONCLUIDO`, liberando o setor para um novo ciclo produtivo.
 
 ### 💧 Monitoramento da umidade do solo
 
-Uma das principais propostas do GHydro é integrar sensores IoT ao sistema para acompanhar a umidade do solo.
+O GHydro utiliza sensores IoT para coletar informações sobre a umidade do solo.
 
-Os sensores realizam leituras periódicas e enviam os registros para armazenamento no banco de dados, permitindo que as informações sejam utilizadas no acompanhamento das condições das áreas monitoradas.
+Esses dados são enviados ao backend e armazenados no PostgreSQL, ficando disponíveis para consulta no aplicativo.
 
-Essa integração representa a conexão entre hardware, comunicação de dados, backend e interfaces de visualização.
+O mobile atua como uma interface de visualização, permitindo ao produtor acompanhar as informações registradas pelos sensores.
 
-### 🌤️ Informações climáticas
+### 🌤️ Monitoramento climático
 
-O sistema disponibiliza a consulta de dados meteorológicos vinculados às propriedades rurais.
+O aplicativo disponibiliza informações meteorológicas das propriedades por meio da integração com a API Open-Meteo.
 
-A integração com a API Open-Meteo permite obter informações climáticas a partir das coordenadas da estação meteorológica cadastrada, complementando os dados agrícolas disponíveis no aplicativo.
+As consultas utilizam as coordenadas das estações meteorológicas cadastradas no sistema, permitindo visualizar dados climáticos relacionados à propriedade.
 
 ### 🛠️ Consulta de manutenções
 
-O aplicativo também disponibiliza acesso a registros e históricos de manutenção, contribuindo para o acompanhamento dos equipamentos e das atividades relacionadas à infraestrutura monitorada.
+O produtor também pode consultar registros e históricos de manutenção dos equipamentos.
 
-### 👤 Personalização de perfil
-
-Os usuários podem selecionar, atualizar ou remover uma foto de perfil, armazenada localmente no dispositivo ou navegador utilizado.
+Essa funcionalidade é destinada exclusivamente à visualização das informações. Os cadastros e as alterações administrativas são realizados fora do aplicativo mobile.
 
 ---
 
-## 🧰 Tecnologias utilizadas
+## 🛠️ Tecnologias utilizadas
 
 | Tecnologia | Aplicação |
 |---|---|
-| Flutter | Desenvolvimento da interface multiplataforma |
-| Dart | Linguagem de programação do aplicativo |
-| Java | Desenvolvimento do backend |
-| Spring Boot | Construção e disponibilização da API REST |
-| PostgreSQL | Persistência e gerenciamento dos dados |
-| JWT | Autenticação e controle de acesso |
-| REST API | Comunicação entre frontend e backend |
-| Open-Meteo | Integração com informações meteorológicas |
-| IoT | Coleta de dados por sensores de umidade |
-| Git e GitHub | Versionamento e gerenciamento do código-fonte |
+| Flutter | Desenvolvimento do aplicativo mobile |
+| Dart | Linguagem de programação do frontend |
+| REST API | Comunicação entre aplicativo e backend |
+| JWT | Autenticação e autorização |
+| Open-Meteo | Consulta de informações meteorológicas |
 
-## 🏗️ Arquitetura da solução
+### Tecnologias da solução completa
 
-O GHydro utiliza uma arquitetura baseada na separação entre frontend, backend e persistência de dados.
+Além do Flutter, o ecossistema GHydro utiliza **Java, Spring Boot, PostgreSQL e um sistema web administrativo**.
 
-**Fluxo simplificado da aplicação:**
+Esses componentes são responsáveis pelo processamento, armazenamento e gerenciamento dos dados consumidos pelo aplicativo.
+
+## 🏗️ Arquitetura geral
 
 ```text
-       Sensores IoT
-            |
-            v
-     Coleta de dados
-            |
-            v
-    Backend Spring Boot
-            |
-            v
-     Banco PostgreSQL
-            ^
-            |
-       API REST
-            |
-            v
-   Aplicativo Flutter
-            |
-            v
-      Usuário final
-
- Integração complementar:
- Flutter <--> Open-Meteo
+                SENSORES IoT
+                     |
+                     v
+             BACKEND JAVA
+              SPRING BOOT
+                     |
+                     v
+               POSTGRESQL
+                     ^
+                     |
+                 API REST
+                     |
+           +---------+---------+
+           |                   |
+           v                   v
+      SISTEMA WEB       APLICATIVO FLUTTER
+       Cadastros         Consulta de dados
+     e gerenciamento     Cadastro de plantios
+                        Registro de colheitas
 ```
 
-O aplicativo Flutter é responsável pela interação com o usuário, apresentação das informações e execução das operações permitidas pela API.
-
-O backend, desenvolvido com Java e Spring Boot, centraliza as regras de negócio, os mecanismos de autenticação e a comunicação com o banco PostgreSQL.
-
-A separação dessas responsabilidades facilita a manutenção do sistema e sua evolução.
-
-## 🔄 Regras de negócio implementadas
-
-O projeto contempla regras importantes para manter a consistência das operações agrícolas:
-
-**Isolamento de dados:** produtores acessam suas propriedades conforme as permissões definidas pelo backend.
-
-**Controle de plantios:** cada setor admite um plantio não concluído por vez, de acordo com as validações implementadas no aplicativo.
-
-**Ciclo produtivo:** novos plantios são cadastrados com status `EM_ANDAMENTO`. Ao registrar a colheita, o plantio passa para `CONCLUIDO`, permitindo iniciar outro ciclo no setor.
-
-**Integração de dados:** setores cadastrados no sistema web são recuperados pelo aplicativo por meio da API.
-
-**Segurança:** as operações autenticadas utilizam JWT, respeitando as permissões fornecidas pelo backend.
-
-> A validação de ocupação dos setores é realizada pelo frontend. A garantia de unicidade em cenários de concorrência depende de validações adicionais no backend.
+O sistema web e o aplicativo mobile são interfaces distintas que se comunicam com o mesmo backend, respeitando as regras de acesso e as responsabilidades de cada plataforma.
 
 ---
 
-## 💻 Execução do projeto
+## ▶️ Como executar
 
 ### Pré-requisitos
 
-- Flutter SDK instalado e configurado.
-- Java e ambiente compatível com o backend Spring Boot.
-- PostgreSQL acessível e configurado.
-- Navegador compatível ou ambiente de emulação Android.
-- Acesso à API do projeto.
+- Flutter SDK instalado.
+- Backend GHydro configurado.
+- PostgreSQL disponível e conectado ao backend.
 
-### Inicialização no Windows
-
-Na pasta do frontend, execute:
+Para iniciar o ambiente configurado no Windows:
 
 ```powershell
 .\start-all.cmd
 ```
 
-O script inicia o backend e a aplicação Flutter Web nos endereços utilizados pelo ambiente de desenvolvimento:
+O comando inicia o backend na porta `8081` e o Flutter Web em:
 
-**Backend:**
-`http://localhost:8081`
-
-**Frontend:**
 `http://localhost:4200`
 
-Para iniciar somente o frontend, com a API já disponível:
+Para executar somente o frontend, com a API já disponível:
 
 ```powershell
 .\start-front.cmd
 ```
 
-No emulador Android, o endereço de acesso ao backend local é:
+Para utilizar o backend local no emulador Android:
 
 ```text
 http://10.0.2.2:8081
 ```
 
-A execução completa depende da disponibilidade do backend e de um banco de dados previamente configurado.
-
-### Validação do frontend
-
-Para analisar o código:
+### Verificações do frontend
 
 ```bash
 flutter analyze
-```
-
-Para executar os testes automatizados:
-
-```bash
 flutter test
-```
-
-Para gerar a versão web:
-
-```bash
 flutter build web
 ```
 
 ---
 
-## 🚀 Desafios técnicos e aprendizados
+## 🎓 Contexto do projeto
 
-O desenvolvimento do GHydro envolve diferentes áreas da Engenharia de Software, proporcionando experiências práticas com:
+O GHydro é um projeto acadêmico desenvolvido durante a graduação em Engenharia de Software, integrando desenvolvimento mobile, sistemas web, APIs REST, banco de dados e Internet das Coisas.
 
-- Integração entre aplicativos Flutter e serviços REST.
-- Desenvolvimento e consumo de APIs com autenticação JWT.
-- Modelagem de dados e relacionamento entre propriedades, setores e plantios.
-- Implementação de regras de negócio relacionadas ao ciclo agrícola.
-- Controle de acesso e isolamento de informações por usuário.
-- Integração com serviços meteorológicos externos.
-- Comunicação entre dispositivos IoT, sistemas de backend e banco de dados.
-- Tratamento de dados e estados da interface.
-- Organização, manutenção e versionamento de um projeto de software.
+Este repositório representa especificamente a **camada frontend mobile**, desenvolvida para facilitar a consulta e a análise das informações agrícolas, além de permitir o registro de plantios e colheitas diretamente pelo produtor.
 
-Além da implementação técnica, o projeto envolve a análise de problemas reais do setor agrícola e a construção de uma solução que conecta diferentes tecnologias.
+**Desenvolvedor:** Lucas Lopes Bastos
 
-## 🔮 Possibilidades de evolução
-
-A arquitetura do GHydro permite explorar novas funcionalidades, como:
-
-- Dashboards analíticos para acompanhamento da produção.
-- Alertas automáticos baseados nas leituras dos sensores.
-- Análises históricas de umidade e condições ambientais.
-- Recomendações de irrigação baseadas em dados.
-- Ampliação dos testes automatizados e das validações no backend.
-- Melhorias na visualização de informações produtivas.
-
-Esses recursos representam possibilidades de desenvolvimento futuro e não necessariamente funcionalidades disponíveis na versão atual.
+**GitHub:** https://github.com/LimpotRed
 
 ---
 
-## 🎓 Contexto acadêmico
-
-O GHydro foi desenvolvido como **Trabalho de Conclusão de Curso (TCC) da graduação em Engenharia de Software**, com foco na aplicação prática de conhecimentos adquiridos durante a formação.
-
-O projeto reúne conceitos de desenvolvimento mobile, arquitetura de software, banco de dados, segurança, integração de sistemas e Internet das Coisas.
-
-Mais do que uma aplicação acadêmica, o GHydro representa uma experiência de construção de software voltada à resolução de problemas reais.
-
-## 👨‍💻 Desenvolvedor
-
-**Lucas Lopes Bastos**
-
-Graduando em Engenharia de Software — SENAI FATESG
-
-[GitHub — LimpotRed](https://github.com/LimpotRed)
-
----
-
-*GHydro — Tecnologia e informação aplicadas à gestão agrícola.*
+*GHydro — Tecnologia aplicada ao monitoramento e à gestão agrícola.*
