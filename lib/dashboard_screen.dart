@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'auth_service.dart';
 import 'farm_planting_screen.dart';
@@ -9,6 +11,7 @@ import 'open_meteo_service.dart';
 import 'resource_schema.dart';
 import 'resource_screen.dart';
 import 'farm_weather_card.dart';
+import 'irrigation_control_screen.dart';
 
 const _background = Color(0xFF15142F);
 const _surface = Color(0xFF242144);
@@ -44,7 +47,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _farmSectorsBusy = false;
   String? _farmSectorsError;
   int _farmSectorsGeneration = 0;
+  List<Map<String, dynamic>> _irrigations = [];
+  bool _irrigationsBusy = false;
+  String? _irrigationsError;
+  int _irrigationsGeneration = 0;
   int _dataGeneration = 0;
+  Timer? _refreshTimer;
+  bool _automaticRefreshInFlight = false;
+  Uint8List? _profilePhoto;
   @override
   void initState() {
     super.initState();
@@ -52,36 +62,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) widget.onLogout(context);
     };
     _load();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
+      if (_busy || _automaticRefreshInFlight || _farmSectorsBusy) return;
+      _automaticRefreshInFlight = true;
+      try {
+        await _load(silent: true);
+      } finally {
+        _automaticRefreshInFlight = false;
+      }
+    });
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     widget.auth.api.onUnauthorized = null;
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool silent = false}) async {
     final generation = ++_dataGeneration;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _busy = true;
+        _error = null;
+      });
+    }
     try {
       final entries = await Future.wait([
-        for (final path in [
-          'propriedade',
-          'dispositivoIrrigacao',
-          'sensor',
-          'recomendacao',
-          'execucaoManejo',
-          'configuracaoCusto',
-        ])
+        for (final path in ['propriedade', 'sensor', 'recomendacao'])
           widget.auth.api.list(path).then((rows) => MapEntry(path, rows)),
       ]);
       if (mounted && generation == _dataGeneration) {
+        final previousFarmId = _selectedFarmId;
         setState(() {
           _data.clear();
           _data.addEntries(entries);
+          _error = null;
           final ids = rows('propriedade')
               .map((farm) => farm['id']?.toString())
               .whereType<String>()
@@ -90,20 +107,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _selectedFarmId = ids.isEmpty ? null : ids.first;
           }
         });
-        unawaited(_loadFarmSectors());
+        _loadFarmIrrigations();
+        await _loadFarmSectors(
+          silent: silent && previousFarmId == _selectedFarmId,
+        );
       }
     } catch (e) {
       if (mounted && generation == _dataGeneration) {
         setState(() => _error = e.toString());
       }
     } finally {
-      if (mounted && generation == _dataGeneration) {
+      if (!silent && mounted && generation == _dataGeneration) {
         setState(() => _busy = false);
       }
     }
   }
 
-  Future<void> _loadFarmSectors() async {
+  Future<void> _loadFarmSectors({bool silent = false}) async {
     final id = _selectedFarmId;
     final generation = ++_farmSectorsGeneration;
     if (id == null) {
@@ -119,21 +139,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       _farmSectorsBusy = true;
       _farmSectorsError = null;
-      _farmSectors = [];
+      if (!silent) {
+        _farmSectors = [];
+      }
     });
     try {
       final sectors = await widget.auth.api.list(
-        'propriedade/${Uri.encodeComponent(id)}/safras/setores',
+        'setor/propriedade/${Uri.encodeComponent(id)}',
       );
       if (mounted && generation == _farmSectorsGeneration) {
-        setState(() => _farmSectors = sectors);
+        setState(() {
+          _farmSectors = sectors;
+          _farmSectorsError = null;
+        });
       }
     } catch (error) {
       if (mounted && generation == _farmSectorsGeneration) {
         setState(() => _farmSectorsError = error.toString());
       }
     } finally {
-      if (mounted && generation == _farmSectorsGeneration) {
+      if (mounted && generation == _farmSectorsGeneration && _farmSectorsBusy) {
         setState(() => _farmSectorsBusy = false);
       }
     }
@@ -143,10 +168,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (id == _selectedFarmId) return;
     setState(() => _selectedFarmId = id);
     _loadFarmSectors();
+    _loadFarmIrrigations();
   }
+
+  Future<void> _loadFarmIrrigations() async {
+    final id = _selectedFarmId;
+    final generation = ++_irrigationsGeneration;
+    if (id == null) {
+      setState(() {
+        _irrigations = [];
+        _irrigationsBusy = false;
+        _irrigationsError = null;
+      });
+      return;
+    }
+    setState(() {
+      _irrigations = [];
+      _irrigationsBusy = true;
+      _irrigationsError = null;
+    });
+    try {
+      final records = await widget.auth.api.list(
+        'registroIrrigacao/propriedade/${Uri.encodeComponent(id)}',
+      );
+      if (!mounted ||
+          generation != _irrigationsGeneration ||
+          _selectedFarmId != id) {
+        return;
+      }
+      setState(() => _irrigations = records);
+    } catch (error) {
+      if (mounted &&
+          generation == _irrigationsGeneration &&
+          _selectedFarmId == id) {
+        setState(() => _irrigationsError = error.toString());
+      }
+    } finally {
+      if (mounted &&
+          generation == _irrigationsGeneration &&
+          _selectedFarmId == id) {
+        setState(() => _irrigationsBusy = false);
+      }
+    }
+  }
+
+  Future<void> _chooseProfilePhoto() async {
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        imageQuality: 85,
+      );
+      if (image == null) return;
+      final bytes = await image.readAsBytes();
+      if (mounted) setState(() => _profilePhoto = bytes);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível abrir a foto.')),
+      );
+    }
+  }
+
+  Iterable<Map<String, dynamic>> get _farmPlantings =>
+      _farmSectors.expand((sector) {
+        final plantings = sector['plantios'];
+        if (plantings is! List) return <Map<String, dynamic>>[];
+        return plantings.whereType<Map>().map(
+          (row) => Map<String, dynamic>.from(row),
+        );
+      });
 
   List<Map<String, dynamic>> rows(String key) => _data[key] ?? [];
   Future<void> _open(ResourceSpec spec) async {
+    if (spec.path == 'dispositivoIrrigacao') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => IrrigationControlScreen(
+            api: widget.auth.api,
+            selectedFarmId: _selectedFarmId,
+            onFarmChanged: _selectFarm,
+          ),
+        ),
+      );
+      if (mounted && widget.auth.api.token != null) await _load();
+      return;
+    }
     if (spec.path == 'plantio') {
       await _openPlantings();
       return;
@@ -214,10 +321,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  double _sum(Iterable<Map<String, dynamic>> rows, String field) => rows.fold(
-    0.0,
-    (sum, row) => sum + ((row[field] as num?)?.toDouble() ?? 0),
-  );
   String _number(num n) =>
       n.toStringAsFixed(n == n.roundToDouble() ? 0 : 2).replaceAll('.', ',');
   @override
@@ -245,14 +348,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          backgroundColor: _surface,
-                          radius: 26,
-                          child: Text(
-                            name.isEmpty
-                                ? 'G'
-                                : name.characters.first.toUpperCase(),
-                            style: const TextStyle(color: _cyan),
+                        InkWell(
+                          onTap: _chooseProfilePhoto,
+                          customBorder: const CircleBorder(),
+                          child: CircleAvatar(
+                            backgroundColor: _surface,
+                            backgroundImage: _profilePhoto == null
+                                ? null
+                                : MemoryImage(_profilePhoto!),
+                            radius: 26,
+                            child: _profilePhoto == null
+                                ? Text(
+                                    name.isEmpty
+                                        ? 'G'
+                                        : name.characters.first.toUpperCase(),
+                                    style: const TextStyle(color: _cyan),
+                                  )
+                                : null,
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -305,7 +417,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       if (!_busy && _error == null) _home(),
                     ],
                     if (_tab == 1) _modules(),
-                    if (_tab == 2) _profile(name),
+                    if (_tab == 2)
+                      _profile(name, _profilePhoto, _chooseProfilePhoto),
                     if (_tab == 3) ...[
                       if (_busy) const LinearProgressIndicator(),
                       if (_error != null)
@@ -367,13 +480,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     child: child,
   );
   Widget _home() {
-    final sensors = rows('sensor');
+    final sectorIds = _farmSectors
+        .map((sector) => sector['id']?.toString())
+        .whereType<String>()
+        .toSet();
+    final sensors = rows('sensor').where((sensor) {
+      final sector = sensor['setor'];
+      return sector is Map && sectorIds.contains(sector['id']?.toString());
+    }).toList();
     final active = sensors.where((s) => s['status'] == 'ATIVO').length;
+    final sensorCountsAvailable =
+        _selectedFarmId != null &&
+        !_farmSectorsBusy &&
+        _farmSectorsError == null;
     final ring = _card(
       Column(
         children: [
           const Text(
-            'SUA IRRIGAÇÃO, MAIS EFICIENTE',
+            'MONITORAMENTO DE SENSORES',
             textAlign: TextAlign.center,
             style: TextStyle(color: _muted, fontSize: 11, letterSpacing: 1.5),
           ),
@@ -383,14 +507,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             height: 240,
             child: CustomPaint(
               painter: _ActivityRing(
-                sensors.isEmpty ? 0 : active / sensors.length,
+                !sensorCountsAvailable || sensors.isEmpty
+                    ? 0
+                    : active / sensors.length,
               ),
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '$active',
+                      sensorCountsAvailable ? '$active' : '--',
                       style: const TextStyle(
                         color: _green,
                         fontSize: 46,
@@ -402,7 +528,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: TextStyle(color: _muted),
                     ),
                     Text(
-                      'de ${sensors.length} cadastrados',
+                      sensorCountsAvailable
+                          ? 'de ${sensors.length} cadastrados'
+                          : 'Dados dos setores indisponíveis',
                       style: const TextStyle(color: _cyan),
                     ),
                   ],
@@ -420,19 +548,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) => constraints.maxWidth >= 800
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: ring),
-                    const SizedBox(width: 24),
-                    Expanded(child: _pivots()),
-                  ],
-                )
-              : Column(children: [ring, const SizedBox(height: 24), _pivots()]),
+        const Text(
+          'Início',
+          style: TextStyle(fontSize: 26, color: Colors.white),
         ),
+        const SizedBox(height: 8),
+        const Text(
+          'Atualização automática a cada 60 segundos',
+          style: TextStyle(color: _muted),
+        ),
+        const SizedBox(height: 16),
+        if (rows('propriedade').isNotEmpty) ...[
+          DropdownButtonFormField<String>(
+            key: ValueKey(_selectedFarmId),
+            initialValue: _selectedFarmId,
+            decoration: const InputDecoration(
+              labelText: 'Fazenda',
+              border: OutlineInputBorder(),
+            ),
+            isExpanded: true,
+            items: [
+              for (final farm in rows('propriedade'))
+                if (farm['id'] != null)
+                  DropdownMenuItem(
+                    value: farm['id'].toString(),
+                    child: Text(
+                      farm['nome']?.toString() ?? 'Fazenda',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+            ],
+            onChanged: _selectFarm,
+          ),
+          const SizedBox(height: 16),
+        ],
+        ring,
         const SizedBox(height: 24),
+        const Text(
+          'Visão Geral',
+          style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Monitoramento Geral — resumo de fazendas, setores, plantios e sensores',
+          style: TextStyle(color: _muted),
+        ),
+        const SizedBox(height: 14),
         LayoutBuilder(
           builder: (context, constraints) {
             final isMobile = constraints.maxWidth < 600;
@@ -467,17 +628,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   'Plantios em andamento',
                   _farmSectorsBusy || _farmSectorsError != null
                       ? '--'
-                      : '${_farmSectors.where((s) => s['plantioAtivo'] is Map && (s['plantioAtivo'] as Map)['statusPlantio'] == 'EM_ANDAMENTO').length}',
+                      : '${_farmPlantings.where((planting) => planting['statusPlantio'] == 'EM_ANDAMENTO').length}',
                   Icons.grass,
                   'plantio',
                   width: cardWidth,
                   square: isMobile,
                 ),
                 _stat(
-                  'Recomendações pendentes',
-                  '${rows('recomendacao').where((r) => r['status'] == 'PENDENTE').length}',
-                  Icons.tips_and_updates_outlined,
-                  'recomendacao',
+                  'Sensores ativos',
+                  _farmSectorsBusy || _farmSectorsError != null
+                      ? '--'
+                      : '$active',
+                  Icons.sensors,
+                  'sensor',
                   width: cardWidth,
                   square: isMobile,
                 ),
@@ -577,89 +740,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _pivots() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'Seus pivôs e dispositivos',
-              style: TextStyle(fontSize: 21, color: Colors.white),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Ver dispositivos',
-            onPressed: () => _open(resource('dispositivoIrrigacao')),
-            icon: const Icon(Icons.arrow_forward),
-          ),
-        ],
-      ),
-      const SizedBox(height: 14),
-      if (rows('dispositivoIrrigacao').isEmpty)
-        _card(const Text('Nenhum dispositivo cadastrado para sua conta.')),
-      if (rows('dispositivoIrrigacao').isNotEmpty)
-        LayoutBuilder(
-          builder: (context, constraints) => Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final row in rows('dispositivoIrrigacao').take(4))
-                SizedBox(
-                  width: (constraints.maxWidth - 12) / 2,
-                  child: AspectRatio(aspectRatio: 1, child: _deviceCard(row)),
-                ),
-            ],
-          ),
-        ),
-    ],
-  );
-
-  Widget _deviceCard(Map<String, dynamic> row) => Container(
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: _surface,
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: const Color(0xFF393254)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.water_drop_outlined, color: _cyan, size: 22),
-            const Spacer(),
-            if (row['eficienciaIrrigacao'] is num)
-              Text(
-                '${_number(row['eficienciaIrrigacao'] as num)}%',
-                style: const TextStyle(color: _green, fontSize: 12),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          row['nome']?.toString() ?? 'Dispositivo',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-        const Spacer(),
-        Text(
-          displayValue(row['tipoDispositivo']),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: _muted, fontSize: 10),
-        ),
-        Text(
-          'Setor: ${displayValue(row['setor'])}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: _muted, fontSize: 10),
-        ),
-      ],
-    ),
-  );
-
   Widget _modules() {
     final available = resources
         .where(
@@ -719,63 +799,199 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _profile(String name) => _card(
-    Column(
+  Widget _profile(String name, Uint8List? photo, VoidCallback choosePhoto) =>
+      _card(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Minha conta',
+              style: TextStyle(fontSize: 26, color: Colors.white),
+            ),
+            const SizedBox(height: 24),
+            Center(
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 48,
+                    backgroundColor: _surface,
+                    backgroundImage: photo == null ? null : MemoryImage(photo),
+                    child: photo == null
+                        ? Text(
+                            name.isEmpty
+                                ? 'G'
+                                : name.characters.first.toUpperCase(),
+                            style: const TextStyle(color: _cyan, fontSize: 30),
+                          )
+                        : null,
+                  ),
+                  TextButton.icon(
+                    onPressed: choosePhoto,
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: Text(
+                      photo == null ? 'Adicionar foto' : 'Trocar foto',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('Nome', style: TextStyle(color: _muted)),
+            Text(name, style: const TextStyle(fontSize: 18)),
+            const SizedBox(height: 20),
+            const Text('E-mail', style: TextStyle(color: _muted)),
+            Text(widget.email),
+            const SizedBox(height: 20),
+            const Text('Perfil de acesso', style: TextStyle(color: _muted)),
+            Text(displayValue(widget.auth.profile?['role'])),
+            const SizedBox(height: 20),
+            const Text('CPF', style: TextStyle(color: _muted)),
+            Text(displayValue(widget.auth.profile?['cpf'])),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () async {
+                final changed = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => _ProfileEditor(auth: widget.auth),
+                  ),
+                );
+                if (changed == true && mounted) setState(() {});
+              },
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Editar perfil'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => widget.onLogout(context),
+              icon: const Icon(Icons.logout),
+              label: const Text('Sair da conta'),
+            ),
+          ],
+        ),
+      );
+  double? _durationHours(Map<String, dynamic> row) {
+    final minutes = _recordedValue(row, 'duracaoMinutos');
+    return minutes == null ? null : minutes / 60;
+  }
+
+  double? _recordedValue(Map<String, dynamic> row, String key) {
+    final value = row[key];
+    if (value is! num || !value.isFinite || value < 0) return null;
+    return value.toDouble();
+  }
+
+  double? _totalValues(Iterable<double?> values) {
+    final present = values.whereType<double>();
+    if (present.isEmpty) return null;
+    return present.fold<double>(0, (sum, value) => sum + value);
+  }
+
+  String _shownValue(double? value) =>
+      value == null ? 'Não informado' : _number(value);
+
+  Widget _reports() {
+    final executions = _irrigations;
+    if (_selectedFarmId == null) {
+      return const Text('Selecione uma fazenda para consultar os relatórios.');
+    }
+    if (_irrigationsBusy) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_irrigationsError != null) {
+      return ErrorPanel(
+        message:
+            'Não foi possível carregar os registros de irrigação da fazenda.',
+        retry: _loadFarmIrrigations,
+      );
+    }
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          'Minha conta',
+          'Relatórios',
           style: TextStyle(fontSize: 26, color: Colors.white),
         ),
-        const SizedBox(height: 24),
-        const Text('Nome', style: TextStyle(color: _muted)),
-        Text(name, style: const TextStyle(fontSize: 18)),
-        const SizedBox(height: 20),
-        const Text('E-mail', style: TextStyle(color: _muted)),
-        Text(widget.email),
-        const SizedBox(height: 20),
-        const Text('Perfil de acesso', style: TextStyle(color: _muted)),
-        Text(displayValue(widget.auth.profile?['role'])),
-        const SizedBox(height: 20),
-        const Text('CPF', style: TextStyle(color: _muted)),
-        Text(displayValue(widget.auth.profile?['cpf'])),
-        const SizedBox(height: 24),
-        FilledButton.icon(
-          onPressed: () async {
-            final changed = await Navigator.of(context).push<bool>(
-              MaterialPageRoute(
-                builder: (_) => _ProfileEditor(auth: widget.auth),
-              ),
-            );
-            if (changed == true && mounted) setState(() {});
-          },
-          icon: const Icon(Icons.edit_outlined),
-          label: const Text('Editar perfil'),
+        const SizedBox(height: 8),
+        const Text(
+          'Irrigações da fazenda selecionada nos últimos 6 meses',
+          style: TextStyle(color: _muted),
         ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: () => widget.onLogout(context),
-          icon: const Icon(Icons.logout),
-          label: const Text('Sair da conta'),
+        const SizedBox(height: 20),
+        if (executions.isEmpty) ...[
+          _card(
+            const Text(
+              'Ainda não há irrigações registradas para esta fazenda.',
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+        _monthlyChart(
+          'Duração das irrigações (horas)',
+          executions,
+          _durationHours,
+        ),
+        const SizedBox(height: 20),
+        _monthlyChart(
+          'Volume de água estimado',
+          executions,
+          (row) => _recordedValue(row, 'volumeAgua'),
+        ),
+        const SizedBox(height: 20),
+        _monthlyChart(
+          'Energia estimada',
+          executions,
+          (row) => _recordedValue(row, 'consumoEnergia'),
+        ),
+        const SizedBox(height: 20),
+        _card(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Irrigações registradas • todo o período',
+                style: TextStyle(fontSize: 20),
+              ),
+              const SizedBox(height: 14),
+              Text('Irrigações: ${executions.length}'),
+              Text(
+                'Duração: ${_shownValue(_totalValues(executions.map(_durationHours)))} horas',
+              ),
+              Text(
+                'Volume de água estimado: ${_shownValue(_totalValues(executions.map((row) => _recordedValue(row, 'volumeAgua'))))}',
+              ),
+              Text(
+                'Energia estimada: ${_shownValue(_totalValues(executions.map((row) => _recordedValue(row, 'consumoEnergia'))))}',
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Água e energia são estimativas calculadas pelo servidor a partir da configuração do equipamento.',
+                style: TextStyle(color: _muted),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Os registros antigos de manejo podem ser consultados separadamente.',
+                style: TextStyle(color: _muted),
+              ),
+              TextButton(
+                onPressed: () => _open(resource('execucaoManejo')),
+                child: const Text('Ver registros de manejo anteriores'),
+              ),
+              TextButton(
+                onPressed: () => _open(resource('configuracaoCusto')),
+                child: const Text('Ver tarifas por propriedade'),
+              ),
+            ],
+          ),
         ),
       ],
-    ),
-  );
-  Widget _reports() {
-    final executions = rows('execucaoManejo');
-    final now = DateTime.now();
-    final monthly = List.generate(6, (i) {
-      final month = DateTime(now.year, now.month - 5 + i);
-      final selected = executions.where((e) {
-        final date = DateTime.tryParse(e['inicio']?.toString() ?? '');
-        return date?.year == month.year && date?.month == month.month;
-      });
-      return (month, _sum(selected, 'volumeAguaAplicado'));
-    });
-    final maxValue = monthly.fold<double>(
-      0,
-      (value, entry) => math.max(value, entry.$2),
     );
+  }
+
+  Widget _monthlyChart(
+    String title,
+    List<Map<String, dynamic>> executions,
+    double? Function(Map<String, dynamic>) valueOf,
+  ) {
     const months = [
       'Jan',
       'Fev',
@@ -790,112 +1006,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'Nov',
       'Dez',
     ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Relatórios',
-          style: TextStyle(fontSize: 26, color: Colors.white),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Volume de água registrado nos últimos 6 meses',
-          style: TextStyle(color: _muted),
-        ),
-        const SizedBox(height: 24),
-        _card(
-          Column(
-            children: [
-              if (executions.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 16),
-                  child: Text('Ainda não há execuções de manejo registradas.'),
-                ),
-              SizedBox(
-                height: 220,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    for (final entry in monthly)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              FittedBox(
-                                child: Text(
-                                  _number(entry.$2),
-                                  style: const TextStyle(fontSize: 11),
-                                ),
+    final now = DateTime.now();
+    final monthly = List.generate(6, (index) {
+      final month = DateTime(now.year, now.month - 5 + index);
+      final selected = executions.where((row) {
+        final date = DateTime.tryParse(row['dataIrrigacao']?.toString() ?? '');
+        return date?.year == month.year && date?.month == month.month;
+      });
+      return (month, _totalValues(selected.map(valueOf)));
+    });
+    final maximum = monthly.fold<double>(
+      0,
+      (value, entry) => math.max(value, entry.$2 ?? 0),
+    );
+    return _card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 200,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (final entry in monthly)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: Semantics(
+                        label:
+                            '${months[entry.$1.month - 1]}: ${_shownValue(entry.$2)}',
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            FittedBox(
+                              child: Text(
+                                entry.$2 == null ? '—' : _number(entry.$2!),
+                                style: const TextStyle(fontSize: 11),
                               ),
-                              const SizedBox(height: 6),
-                              Container(
-                                height: maxValue == 0
-                                    ? 2
-                                    : math.max(2, 160 * entry.$2 / maxValue),
-                                width: 36,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.bottomCenter,
-                                    end: Alignment.topCenter,
-                                    colors: [Color(0xFF6634CE), _cyan],
-                                  ),
-                                ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              height: maximum == 0 || entry.$2 == null
+                                  ? 2
+                                  : math.max(2, 140 * entry.$2! / maximum),
+                              width: 30,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                color: _cyan,
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                months[entry.$1.month - 1],
-                                style: const TextStyle(
-                                  color: _muted,
-                                  fontSize: 11,
-                                ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              months[entry.$1.month - 1],
+                              style: const TextStyle(
+                                color: _muted,
+                                fontSize: 11,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                  ],
-                ),
-              ),
-            ],
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 24),
-        _card(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Recursos registrados • todo o período',
-                style: TextStyle(fontSize: 20),
-              ),
-              const SizedBox(height: 14),
-              Text('Execuções: ${executions.length}'),
-              Text(
-                'Volume de água: ${_number(_sum(executions, 'volumeAguaAplicado'))}',
-              ),
-              Text(
-                'Energia gasta: ${_number(_sum(executions, 'energiaGasta'))}',
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'Os valores seguem a unidade informada nos registros. A economia financeira depende de uma referência de consumo, ainda não fornecida pelo serviço.',
-                style: TextStyle(color: _muted),
-              ),
-              TextButton(
-                onPressed: () => _open(resource('execucaoManejo')),
-                child: const Text('Ver execuções'),
-              ),
-              TextButton(
-                onPressed: () => _open(resource('configuracaoCusto')),
-                child: const Text('Ver tarifas por propriedade'),
-              ),
-            ],
+          const SizedBox(height: 8),
+          const Text(
+            '— indica ausência de dados.',
+            style: TextStyle(color: _muted, fontSize: 11),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

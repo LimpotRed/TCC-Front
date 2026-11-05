@@ -323,11 +323,11 @@ const resources = [
   ),
   ResourceSpec(
     'dispositivoIrrigacao',
-    'Pivôs e irrigação',
+    'Controle de irrigação',
     'Dispositivo',
     'Monitoramento',
     Icons.water_drop_outlined,
-    'Equipamentos e parâmetros de irrigação por setor.',
+    'Registre o tempo de funcionamento da irrigação por setor.',
     [
       DataField('nome', 'Nome'),
       DataField(

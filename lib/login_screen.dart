@@ -25,6 +25,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
+  final _passwordFocus = FocusNode();
+  final _confirmFocus = FocusNode();
+  final _visibilityButtonFocus = FocusNode(
+    skipTraversal: true,
+    canRequestFocus: false,
+  );
 
   _AuthMode _mode = _AuthMode.login;
   bool _hidePassword = true;
@@ -42,6 +48,9 @@ class _LoginScreenState extends State<LoginScreen> {
     for (final controller in [_name, _email, _password, _confirm]) {
       controller.dispose();
     }
+    _passwordFocus.dispose();
+    _confirmFocus.dispose();
+    _visibilityButtonFocus.dispose();
     super.dispose();
   }
 
@@ -140,6 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return TextFormField(
       key: ValueKey(confirmation ? 'confirm' : 'password'),
       controller: confirmation ? _confirm : _password,
+      focusNode: confirmation ? _confirmFocus : _passwordFocus,
       obscureText: hidden,
       autocorrect: false,
       enableSuggestions: false,
@@ -161,6 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ? 'Use pelo menos 8 caracteres.'
                 : null,
             suffixIcon: IconButton(
+              focusNode: _visibilityButtonFocus,
               tooltip: hidden ? 'Mostrar senha' : 'Ocultar senha',
               onPressed: () => setState(() {
                 if (confirmation) {

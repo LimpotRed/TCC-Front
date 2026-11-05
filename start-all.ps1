@@ -1,6 +1,8 @@
 ﻿param(
     [string]$ApiBaseUrl = 'http://localhost:8081',
-    [string]$BackendPath
+    [string]$BackendPath,
+    [ValidateRange(1, 65535)]
+    [int]$WebPort = 4200
 )
 
 $ErrorActionPreference = 'Stop'
@@ -79,5 +81,5 @@ while (-not (Test-BackendPort)) {
 }
 
 Write-Host "Backend iniciado (PID $($backendProcess.Id)). Iniciando frontend em $frontendPath ..." -ForegroundColor Green
-& $frontendScript -ApiBaseUrl $ApiBaseUrl
+& $frontendScript -ApiBaseUrl $ApiBaseUrl -WebPort $WebPort
 exit $LASTEXITCODE

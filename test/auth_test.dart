@@ -15,11 +15,109 @@ http.Response jsonResponse(Object data, [int status = 200]) => http.Response(
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
 
+String testToken({String role = 'PRODUTOR'}) {
+  final payload = base64Url
+      .encode(
+        utf8.encode(
+          jsonEncode({
+            'sub': 'lucas@example.com',
+            'nome': 'Lucas',
+            'role': role,
+          }),
+        ),
+      )
+      .replaceAll('=', '');
+  return 'header.$payload.signature';
+}
+
 void main() {
+  test(
+    'Backend sem perfil valida token antes de apresentar dados da sessão',
+    () async {
+      final payload = base64Url
+          .encode(
+            utf8.encode(
+              jsonEncode({
+                'sub': 'lucas@example.com',
+                'nome': 'Lucas',
+                'role': 'PRODUTOR',
+              }),
+            ),
+          )
+          .replaceAll('=', '');
+      final requests = <String>[];
+      final auth = AuthService(
+        api: ApiClient(
+          client: MockClient((request) async {
+            requests.add(request.url.path);
+            if (request.url.path == '/auth/login') {
+              return jsonResponse({'token': 'header.$payload.signature'});
+            }
+            expect(
+              request.headers['Authorization'],
+              'Bearer header.$payload.signature',
+            );
+            return jsonResponse(['BRL']);
+          }),
+        ),
+      );
+
+      expect(
+        await auth.signIn(email: 'lucas@example.com', password: 'senha123'),
+        'Lucas',
+      );
+      expect(requests, ['/auth/login', '/dominios/moedas']);
+      expect(auth.profile?['email'], 'lucas@example.com');
+      expect(auth.canManage, isFalse);
+    },
+  );
+
+  test('Não mantém sessão quando o backend rejeita o token', () async {
+    final auth = AuthService(
+      api: ApiClient(
+        client: MockClient((request) async {
+          if (request.url.path == '/auth/login') {
+            return jsonResponse({'token': 'a.b.c'});
+          }
+          return jsonResponse({}, 401);
+        }),
+      ),
+    );
+    await expectLater(
+      auth.signIn(email: 'lucas@example.com', password: 'senha123'),
+      throwsA(isA<ApiFailure>()),
+    );
+    expect(auth.api.token, isNull);
+    expect(auth.profile, isNull);
+  });
+
+  test(
+    'Rejeita token aceito pelo serviço simulado com perfil desconhecido',
+    () async {
+      final auth = AuthService(
+        api: ApiClient(
+          client: MockClient((request) async {
+            if (request.url.path == '/auth/login') {
+              return jsonResponse({'token': testToken(role: 'DESCONHECIDO')});
+            }
+            return jsonResponse(['BRL']);
+          }),
+        ),
+      );
+      await expectLater(
+        auth.signIn(email: 'lucas@example.com', password: 'senha123'),
+        throwsA(isA<ApiFailure>()),
+      );
+      expect(auth.api.token, isNull);
+      expect(auth.profile, isNull);
+    },
+  );
+
   test(
     'Cadastro envia nome e senha à API; login usa JWT e perfil do servidor',
     () async {
       final requests = <http.Request>[];
+      final token = testToken(role: 'TECNICO');
       final auth = AuthService(
         api: ApiClient(
           client: MockClient((r) async {
@@ -28,14 +126,10 @@ void main() {
               return jsonResponse({'message': 'Criado'});
             }
             if (r.url.path == '/auth/login') {
-              return jsonResponse({'token': 'test-token'});
+              return jsonResponse({'token': token});
             }
-            expect(r.headers['Authorization'], 'Bearer test-token');
-            return jsonResponse({
-              'nome': 'Lucas',
-              'email': 'lucas@example.com',
-              'role': 'TECNICO',
-            });
+            expect(r.headers['Authorization'], 'Bearer $token');
+            return jsonResponse(['BRL']);
           }),
         ),
       );
@@ -137,14 +231,7 @@ void main() {
                 'message': 'E-mail ou senha incorretos.',
               }, 401);
             }
-            return jsonResponse({'token': 'token'});
-          }
-          if (r.url.path == '/auth/me') {
-            return jsonResponse({
-              'nome': 'Lucas',
-              'email': 'lucas@example.com',
-              'role': 'PRODUTOR',
-            });
+            return jsonResponse({'token': testToken()});
           }
           return jsonResponse([]);
         }),
@@ -188,6 +275,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(DashboardScreen), findsOneWidget);
     expect(find.text('Lucas'), findsOneWidget);
-    expect(find.text('Seus pivôs e dispositivos'), findsOneWidget);
+    expect(find.text('Seus pivôs e dispositivos'), findsNothing);
+    expect(find.text('Visão Geral'), findsOneWidget);
   });
 }

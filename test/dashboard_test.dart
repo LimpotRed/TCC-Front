@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -27,37 +28,23 @@ void main() {
                 {'id': 1, 'nome': 'Fazenda central'},
                 {'id': 2, 'nome': 'Fazenda sul'},
               ],
-              '/propriedade/1/estacoes' => [
-                {
-                  'id': 1,
-                  'nome': 'Estação central',
-                  'latitude': -16.8,
-                  'longitude': -50.0,
-                },
+              '/estacaoMetereologica/propriedade/1' => {
+                'id': 1,
+                'nome': 'Estação central',
+                'latitude': -16.8,
+                'longitude': -50.0,
+              },
+              '/setor/propriedade/1' => [
+                {'id': 10, 'nome': 'Setor Norte', 'plantios': []},
               ],
-              '/propriedade/1/safras/setores' => [
-                {
-                  'id': 10,
-                  'nome': 'Setor Norte',
-                  'status': 'EM_DESCANSO',
-                  'plantioAtivo': null,
-                },
-              ],
-              '/propriedade/2/estacoes' => [
-                {
-                  'id': 2,
-                  'nome': 'Estação sul',
-                  'latitude': -23.5,
-                  'longitude': -46.6,
-                },
-              ],
-              '/propriedade/2/safras/setores' => [
-                {
-                  'id': 20,
-                  'nome': 'Setor Sul',
-                  'status': 'EM_DESCANSO',
-                  'plantioAtivo': null,
-                },
+              '/estacaoMetereologica/propriedade/2' => {
+                'id': 2,
+                'nome': 'Estação sul',
+                'latitude': -23.5,
+                'longitude': -46.6,
+              },
+              '/setor/propriedade/2' => [
+                {'id': 20, 'nome': 'Setor Sul', 'plantios': []},
               ],
               _ => [],
             }),
@@ -95,7 +82,7 @@ void main() {
     expect(find.text('Clima da fazenda'), findsNothing);
     expect(queriedLatitudes, isEmpty);
     expect(queriedPaths.where((p) => p.endsWith('/estacoes')), isEmpty);
-    expect(queriedPaths, contains('/propriedade/1/safras/setores'));
+    expect(queriedPaths, contains('/setor/propriedade/1'));
     expect(queriedPaths, isNot(contains('/plantio')));
     expect(queriedPaths.where((p) => p.endsWith('/indicadores')), isEmpty);
 
@@ -118,7 +105,7 @@ void main() {
     await tester.tap(find.text('Fazenda sul').last);
     await tester.pumpAndSettle();
     expect(queriedLatitudes.last, '-23.5');
-    expect(queriedPaths, contains('/propriedade/2/safras/setores'));
+    expect(queriedPaths, contains('/setor/propriedade/2'));
 
     await tester.tap(find.byTooltip('Atualizar clima'));
     await tester.pumpAndSettle();
@@ -149,6 +136,385 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Atualização automática recupera falha anterior do painel', (
+    tester,
+  ) async {
+    var first = true;
+    final auth = AuthService(
+      api: ApiClient(
+        client: MockClient((request) async {
+          if (request.url.path == '/propriedade' && first) {
+            first = false;
+            return http.Response('{}', 500);
+          }
+          return http.Response(
+            jsonEncode(
+              request.url.path == '/propriedade'
+                  ? [
+                      {'id': 1, 'nome': 'Fazenda'},
+                    ]
+                  : [],
+            ),
+            200,
+          );
+        }),
+      )..token = 'sessão-teste',
+    )..profile = {'nome': 'Lucas', 'role': 'PRODUTOR'};
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: DashboardScreen(
+          auth: auth,
+          name: 'Lucas',
+          email: 'lucas@example.com',
+          onLogout: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Visão Geral'), findsNothing);
+    await tester.pump(const Duration(seconds: 60));
+    await tester.pumpAndSettle();
+    expect(find.text('Visão Geral'), findsOneWidget);
+  });
+
+  testWidgets('Atualização troca fazenda removida sem usar setores antigos', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final secondFarmSectors = Completer<http.Response>();
+    var farmLoads = 0;
+    final auth = AuthService(
+      api: ApiClient(
+        client: MockClient((request) async {
+          if (request.url.path == '/setor/propriedade/2') {
+            return secondFarmSectors.future;
+          }
+          final result = switch (request.url.path) {
+            '/propriedade' =>
+              ++farmLoads == 1
+                  ? [
+                      {'id': 1, 'nome': 'Fazenda A'},
+                      {'id': 2, 'nome': 'Fazenda B'},
+                    ]
+                  : [
+                      {'id': 2, 'nome': 'Fazenda B'},
+                    ],
+            '/setor/propriedade/1' => [
+              {'id': 10, 'nome': 'Setor A', 'plantios': []},
+            ],
+            '/dispositivoIrrigacao' => [
+              {
+                'id': 7,
+                'nome': 'Pivô A',
+                'ativo': true,
+                'setor': {'id': 10},
+              },
+              {
+                'id': 8,
+                'nome': 'Pivô B',
+                'ativo': true,
+                'setor': {'id': 20},
+              },
+            ],
+            _ => [],
+          };
+          return http.Response(
+            jsonEncode(result),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      )..token = 'sessão-teste',
+    )..profile = {'nome': 'Lucas', 'role': 'PRODUTOR'};
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: DashboardScreen(
+          auth: auth,
+          name: 'Lucas',
+          email: 'lucas@example.com',
+          onLogout: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pivô A'), findsNothing);
+    expect(find.text('Registrar irrigação'), findsNothing);
+    await tester.pump(const Duration(seconds: 60));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Fazenda B'), findsOneWidget);
+    expect(find.text('Pivô A'), findsNothing);
+    expect(find.text('Registrar irrigação'), findsNothing);
+    secondFarmSectors.complete(
+      http.Response(
+        jsonEncode([
+          {'id': 20, 'nome': 'Setor B', 'plantios': []},
+        ]),
+        200,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pivô B'), findsNothing);
+    expect(find.text('Registrar irrigação'), findsNothing);
+  });
+
+  testWidgets(
+    'Controle de irrigação fica na Gestão e recupera erro de setores',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(600, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var farmRequests = 0;
+      var southSectorRequests = 0;
+      final auth = AuthService(
+        api: ApiClient(
+          client: MockClient((request) async {
+            final path = request.url.path;
+            if (path == '/propriedade') farmRequests++;
+            if (path == '/setor/propriedade/2' && ++southSectorRequests == 2) {
+              return http.Response(
+                '{"message":"Erro ao consultar setores"}',
+                503,
+              );
+            }
+            final Object? body = switch (path) {
+              '/propriedade' => [
+                {'id': 1, 'nome': 'Fazenda Norte'},
+                {'id': 2, 'nome': 'Fazenda Sul'},
+              ],
+              '/setor/propriedade/1' => [
+                {'id': 10, 'nome': 'Setor Norte', 'plantios': []},
+              ],
+              '/setor/propriedade/2' => [
+                {'id': 20, 'nome': 'Setor Sul', 'plantios': []},
+              ],
+              '/configuracaoCusto/propriedade/2' => null,
+              _ => [],
+            };
+            return http.Response(
+              jsonEncode(body),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }),
+        )..token = 'sessão-teste',
+      )..profile = {'nome': 'Lucas', 'role': 'PRODUTOR'};
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: DashboardScreen(
+            auth: auth,
+            name: 'Lucas',
+            email: 'lucas@example.com',
+            onLogout: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Registrar irrigação'), findsNothing);
+      await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Fazenda Sul').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Gestão'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pivôs e irrigação'), findsNothing);
+      await tester.enterText(find.byType(TextField), 'Controle de irrigação');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'Controle de irrigação'));
+      await tester.pumpAndSettle();
+
+      expect(farmRequests, greaterThanOrEqualTo(2));
+      expect(southSectorRequests, 2);
+      expect(find.textContaining('Não foi possível carregar'), findsOneWidget);
+      expect(find.text('Buscar registros'), findsNothing);
+      await tester.tap(find.text('Tentar novamente'));
+      await tester.pumpAndSettle();
+      expect(southSectorRequests, 3);
+      expect(find.text('Fazenda Sul'), findsOneWidget);
+      final register = find.widgetWithText(FilledButton, 'Registrar irrigação');
+      expect(tester.widget<FilledButton>(register).onPressed, isNotNull);
+      await tester.tap(register);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      expect(find.text('Setor Sul'), findsOneWidget);
+      expect(find.text('Setor Norte'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('Relatórios e sensores usam somente a fazenda selecionada', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(600, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final paths = <String>[];
+    final end = DateTime.now().subtract(const Duration(minutes: 10));
+    final start = end.subtract(const Duration(hours: 3));
+    final auth = AuthService(
+      api: ApiClient(
+        client: MockClient((request) async {
+          paths.add(request.url.path);
+          final body = switch (request.url.path) {
+            '/propriedade' => [
+              {'id': 1, 'nome': 'Fazenda Norte'},
+              {'id': 2, 'nome': 'Fazenda Sul'},
+            ],
+            '/setor/propriedade/1' => [
+              {
+                'id': 10,
+                'nome': 'Setor Norte',
+                'plantios': [
+                  {'id': 100, 'statusPlantio': 'EM_ANDAMENTO'},
+                ],
+              },
+            ],
+            '/setor/propriedade/2' => [
+              {
+                'id': 20,
+                'nome': 'Setor Sul',
+                'plantios': [
+                  {'id': 200, 'statusPlantio': 'EM_ANDAMENTO'},
+                ],
+              },
+            ],
+            '/dispositivoIrrigacao' => [
+              {
+                'id': 7,
+                'nome': 'Pivô Norte',
+                'ativo': true,
+                'setor': {'id': 10},
+              },
+              {
+                'id': 8,
+                'nome': 'Pivô Sul',
+                'ativo': true,
+                'setor': {'id': 20},
+              },
+            ],
+            '/sensor' => [
+              {
+                'status': 'ATIVO',
+                'setor': {'id': 10},
+              },
+              {
+                'status': 'ATIVO',
+                'setor': {'id': 20},
+              },
+              {
+                'status': 'ATIVO',
+                'setor': {'id': 20},
+              },
+            ],
+            '/registroIrrigacao/propriedade/1' => [
+              {
+                'dataIrrigacao': start.toIso8601String(),
+                'duracaoMinutos': 180,
+                'volumeAgua': 12,
+              },
+            ],
+            '/registroIrrigacao/propriedade/2' => [
+              {
+                'dataIrrigacao': start.toIso8601String(),
+                'duracaoMinutos': 180,
+                'volumeAgua': 999,
+                'consumoEnergia': 20,
+              },
+            ],
+            _ => [],
+          };
+          return http.Response(
+            jsonEncode(body),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      )..token = 'sessão-teste',
+    )..profile = {'nome': 'Lucas', 'role': 'PRODUTOR'};
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: DashboardScreen(
+          auth: auth,
+          name: 'Lucas',
+          email: 'lucas@example.com',
+          onLogout: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Visão Geral'), findsOneWidget);
+    expect(find.text('Registrar irrigação'), findsNothing);
+    expect(find.text('Pivô Norte'), findsNothing);
+    expect(find.text('Pivô Sul'), findsNothing);
+    expect(paths, isNot(contains('/dispositivoIrrigacao')));
+    expect(paths, isNot(contains('/execucaoManejo')));
+    final sensorLabel = find.text('Sensores ativos').last;
+    expect(
+      find.ancestor(of: sensorLabel, matching: find.byType(Card)).first,
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.ancestor(of: sensorLabel, matching: find.byType(Card)).first,
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Relatórios').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Irrigações: 1'), findsOneWidget);
+    expect(find.text('Duração: 3 horas'), findsOneWidget);
+    expect(find.text('Volume de água estimado: 12'), findsOneWidget);
+    expect(find.text('Energia estimada: Não informado'), findsOneWidget);
+    expect(find.text('999'), findsNothing);
+    final callsBefore = paths
+        .where((path) => path == '/registroIrrigacao/propriedade/1')
+        .length;
+    await tester.pump(const Duration(seconds: 60));
+    await tester.pump();
+    expect(
+      paths.where((path) => path == '/registroIrrigacao/propriedade/1').length,
+      greaterThan(callsBefore),
+    );
+
+    await tester.tap(find.text('Início'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fazenda Sul').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Pivô Sul'), findsNothing);
+    expect(find.text('Pivô Norte'), findsNothing);
+    expect(
+      find.descendant(
+        of: find
+            .ancestor(
+              of: find.text('Sensores ativos').last,
+              matching: find.byType(Card),
+            )
+            .first,
+        matching: find.text('2'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Relatórios').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Irrigações: 1'), findsOneWidget);
+    expect(find.text('Volume de água estimado: 999'), findsOneWidget);
+    expect(find.text('Energia estimada: 20'), findsOneWidget);
+    expect(find.text('Volume de água estimado: 12'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final width in [320.0, 1200.0]) {
     testWidgets('Painel conectado e navegação na largura $width', (
       tester,
@@ -161,21 +527,32 @@ void main() {
           client: MockClient(
             (r) async => http.Response(
               jsonEncode(
-                r.url.path == '/dispositivoIrrigacao'
+                r.url.path == '/propriedade'
+                    ? [
+                        {'id': 1, 'nome': 'Fazenda central'},
+                      ]
+                    : r.url.path == '/setor/propriedade/1'
+                    ? [
+                        {'id': 10, 'nome': 'Leste', 'plantios': []},
+                        {'id': 20, 'nome': 'Sul', 'plantios': []},
+                      ]
+                    : r.url.path == '/dispositivoIrrigacao'
                     ? [
                         {
                           'id': 7,
                           'nome': 'Pivô Leste',
+                          'ativo': true,
                           'tipoDispositivo': 'PIVO',
                           'eficienciaIrrigacao': 85,
-                          'setor': {'nome': 'Leste'},
+                          'setor': {'id': 10, 'nome': 'Leste'},
                         },
                         {
                           'id': 8,
                           'nome': 'Pivô Sul',
+                          'ativo': true,
                           'tipoDispositivo': 'PIVO',
                           'eficienciaIrrigacao': 92,
-                          'setor': {'nome': 'Sul'},
+                          'setor': {'id': 20, 'nome': 'Sul'},
                         },
                       ]
                     : [],
@@ -200,13 +577,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Clima da fazenda'), findsNothing);
       expect(tester.takeException(), isNull);
-      await tester.ensureVisible(find.text('Pivô Leste'));
-      expect(find.text('85%'), findsOneWidget);
-      expect(find.text('92%'), findsOneWidget);
-      final leftDevice = tester.getRect(find.text('Pivô Leste'));
-      final rightDevice = tester.getRect(find.text('Pivô Sul'));
-      expect((leftDevice.top - rightDevice.top).abs(), lessThan(1));
-      expect(rightDevice.left, greaterThan(leftDevice.left));
+      expect(find.text('Seus pivôs e dispositivos'), findsNothing);
+      expect(find.text('Pivô Leste'), findsNothing);
+      expect(find.text('Pivô Sul'), findsNothing);
       if (width == 320) {
         await tester.ensureVisible(find.text('Setores'));
         await tester.pumpAndSettle();
@@ -232,15 +605,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Relatórios').last);
       await tester.pumpAndSettle();
-      expect(
-        find.text('Volume de água registrado nos últimos 6 meses'),
-        findsOneWidget,
-      );
+      expect(find.text('Volume de água estimado'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('Perfil'));
       await tester.pumpAndSettle();
       expect(find.text('lucas@example.com'), findsOneWidget);
       await tester.ensureVisible(find.text('Sair da conta'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Sair da conta'));
       expect(loggedOut, isTrue);
     });

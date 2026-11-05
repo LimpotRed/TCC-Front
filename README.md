@@ -2,45 +2,31 @@
 
 Aplicativo Flutter conectado ao backend Spring Boot. O script de execução procura o backend na pasta irmã `TCC-BACKAND` ou em `Tcc-Back\GHydro-BackEnd` na Área de Trabalho do usuário.
 
-O backend usado atualmente está em `../../Tcc-Back/GHydro-BackEnd`. Essa cópia atende `GET /auth/me`, `GET /propriedade/{id}/estacoes`, as rotas de safras por fazenda e a origem local `http://localhost:8080`. `PUT /auth/me` continua ausente, portanto a edição do perfil ainda não conclui. Veja as [limitações atuais da integração](INTEGRACAO.md#diferenças-da-cópia-atual-do-backend).
+O backend atualmente selecionado esta em `../../Tcc-Back/GHydro-BackEnd`. Essa copia nao oferece `GET` ou `PUT /auth/me` nem as rotas `/propriedade/{id}/safras/...` usadas pela tela de safras. O login valida o token em `/dominios/moedas`; a foto de perfil e apenas de sessao. O cartao climatico consulta a estacao vinculada em `GET /estacaoMetereologica/propriedade/{id}`. Veja o aviso no inicio de [INTEGRACAO.md](INTEGRACAO.md).
+
+**Banco:** a cópia atual do backend usa `ddl-auto=update` e pode criar ou alterar tabelas no PostgreSQL remoto. Não inicie essa cópia nem seus testes de contexto até que o responsável resolva a configuração. O arquivo versionado também contém credenciais e segredo JWT; trate-os como potencialmente expostos.
 
 As contas e os dados do sistema são persistidos pelo backend no PostgreSQL remoto. O aplicativo não usa banco local, `localStorage` ou dados demonstrativos como alternativa. O token de acesso fica somente na memória; ao recarregar a página, é necessário entrar novamente.
 
 ## Executar no Windows
 
-Para iniciar o backend e o frontend juntos, execute na pasta deste projeto:
-
-```powershell
-.\start-all.cmd
-```
-
-Esse comando inicia o backend em segundo plano, aguarda a porta 8081 por até dois minutos e inicia o Flutter em [http://localhost:8080](http://localhost:8080), usando a API em `http://localhost:8081`. O terminal informa os arquivos de log temporários do backend. Se a porta 8081 já estiver ocupada, o script informa isso e evita iniciar outra API.
-
-Para indicar outra pasta do backend:
-
-```powershell
-.\start-all.cmd -BackendPath 'C:\Users\lucas\OneDrive\Área de Trabalho\Tcc-Back\GHydro-BackEnd'
-```
-
-O backend pode ter `start-backend.cmd` ou `mvnw.cmd`. Neste último caso, `start-backend.ps1` recompila o backend com `clean compile` e executa `spring-boot:run` na porta 8081, usando JDK 21 ou mais recente. Ele procura o JDK em `JAVA_HOME`, no `javac` do `PATH` e no Java instalado pela extensão Red Hat Java do VS Code. A seleção altera o ambiente somente do processo do backend, sem configuração permanente do Windows.
-
-O frontend procura Flutter no `PATH`, em `C:\flutter\bin\flutter.bat` e, como alternativa, em `C:\Users\Aluno\develop\flutter\bin\flutter.bat`. O backend lê a conexão e o segredo JWT de variáveis `GHYDRO_DB_URL`, `GHYDRO_DB_USER`, `GHYDRO_DB_PASSWORD` e `GHYDRO_JWT_SECRET` ou do arquivo local `Tcc-Back/GHydro-BackEnd/.env.properties`. A configuração local deste computador foi preservada nesse arquivo, que é ignorado pelo Git; em outra máquina, copie `.env.properties.example` e preencha os valores. A API valida o esquema existente e não cria nem altera tabelas na inicialização normal.
-
-Também é possível iniciar os serviços em terminais separados, a partir da pasta deste frontend:
-
-1. Inicie o backend no primeiro terminal:
-
-```powershell
-.\start-backend.ps1 -BackendPath 'C:\Users\lucas\OneDrive\Área de Trabalho\Tcc-Back\GHydro-BackEnd'
-```
-
-2. Em outro terminal, inicie o frontend:
+Com uma API que já esteja rodando em ambiente seguro, inicie o frontend na pasta deste projeto:
 
 ```powershell
 .\start-front.cmd
 ```
 
-3. Abra [http://localhost:8080](http://localhost:8080).
+O Flutter abre em [http://localhost:4200](http://localhost:4200) e usa a API `http://localhost:8081` por padrão. O CORS global do backend atual permite a origem `localhost:4200`. Para outra porta, use `-WebPort` e confirme que a API a permite.
+
+O script conjunto inicia backend e frontend; use-o somente depois de confirmar que o backend selecionado está configurado de maneira segura:
+
+```powershell
+.\start-all.cmd -BackendPath 'C:\caminho\de\uma-api-segura'
+```
+
+O backend pode ter `start-backend.cmd` ou `mvnw.cmd`. Neste último caso, `start-backend.ps1` recompila o backend com `clean compile` e executa `spring-boot:run` na porta 8081, usando JDK 21 ou mais recente. Ele procura o JDK em `JAVA_HOME`, no `javac` do `PATH` e no Java instalado pela extensão Red Hat Java do VS Code. A seleção altera o ambiente somente do processo do backend, sem configuração permanente do Windows.
+
+O frontend procura Flutter no `PATH`, em `C:\flutter\bin\flutter.bat` e, como alternativa, em `C:\Users\Aluno\develop\flutter\bin\flutter.bat`.
 
 O frontend usa `http://localhost:8081` como API por padrão. Para apontar para uma API hospedada:
 
@@ -48,26 +34,33 @@ O frontend usa `http://localhost:8081` como API por padrão. Para apontar para u
 .\start-front.cmd -ApiBaseUrl 'https://api.exemplo.com'
 ```
 
-`start-all.cmd` também aceita `-ApiBaseUrl` para definir a API usada pelo frontend. O mesmo valor pode ser passado diretamente ao Flutter com `--dart-define=API_BASE_URL=...`. No emulador Android, use `http://10.0.2.2:8081` para acessar o backend do computador. O backend permite `http://localhost:8080` e `http://localhost:4200` por padrão; `CORS_ORIGINS` substitui essas origens quando necessário. Em produção, publique frontend e API com HTTPS.
+`start-all.cmd` também aceita `-ApiBaseUrl` e `-WebPort`. A URL da API pode ser passada ao Flutter com `--dart-define=API_BASE_URL=...`. No emulador Android, use `http://10.0.2.2:8081` para acessar o backend do computador. Em produção, publique frontend e API com HTTPS.
 
 ## Funcionalidades da interface
 
-- Cadastro público de conta, login e consulta do perfil pela API; a edição do perfil depende de `PUT /auth/me`, ausente no backend atual.
-- Painel com propriedades, dispositivos, sensores e execuções reais.
-- Cartão de clima em **Gestão > Clima > Leituras climáticas**, com temperatura, chance de chuva, umidade e vento do Open-Meteo nas coordenadas de uma estação vinculada.
-- Safras por fazenda: consulta dos setores, início de plantio em setor disponível, registro de colheita e histórico produtivo.
+- Cadastro público de conta e login; a edição do perfil depende de `PUT /auth/me`, ausente no backend atual.
+- Visão geral com seleção de fazenda, atualização a cada 60 segundos, setores, plantios e sensores. O controle de irrigação fica na Gestão.
+- Cartão de clima em **Gestão > Clima > Leituras climáticas** usa a estação vinculada; a tela de safras depende de rotas ausentes no backend atual.
 - Consulta de fazendas, setores e estações cadastrados no aplicativo web da outra equipe, sem comandos de escrita para esses recursos.
-- Consulta, edição e exclusão dos demais módulos disponíveis no backend, conforme as permissões de acesso. A criação após o login existe somente para plantio e colheita na tela de safras.
+- Consulta, edição e exclusão dos demais módulos conforme as permissões; a criação após o login existe nos fluxos específicos de irrigação e de safras, cuja API está ausente na cópia atual.
 - Pesquisa, filtros de situação, paginação visual, detalhes e confirmação antes de excluir.
 - Seletores de relacionamentos, datas, horários e enumerações nos formulários disponíveis.
 - Histórico administrativo de manutenções.
-- Relatórios calculados a partir das execuções de manejo retornadas pela API.
+- Relatórios por fazenda com duração e estimativas de água e energia dos registros de irrigação.
 
-O perfil `PRODUTOR` pode iniciar plantios e registrar colheitas nas fazendas ligadas ao seu proprietário; `ADMIN` e `TECNICO` mantêm edição e exclusão nos recursos editáveis. O backend não possui role separada `PROPRIETARIO` nem vínculo produtor–fazenda independente; reconhece o vínculo direto `Usuario.proprietario` e o vínculo legado `Proprietario.usuarioId`. O cadastro público de conta permanece na tela de login e cria somente `PRODUTOR`. Fazendas, setores e estações meteorológicas são somente leitura no mobile. O backend verifica o acesso às fazendas nas rotas de safras; outras listagens têm restrições próprias descritas em [INTEGRACAO.md](INTEGRACAO.md).
+O formulário público envia o perfil `PRODUTOR`; o backend atual aceita o perfil enviado diretamente e precisa de correção de autorização pelo responsável. O token informa nome, e-mail e perfil para exibição, mas a API decide as permissões. Algumas listagens não estão isoladas por produtor no backend; os filtros do Flutter não substituem essa proteção. Fazendas, setores e estações são somente leitura no mobile.
+
+## Registrar irrigação
+
+Em **Gestão > Monitoramento > Controle de irrigação**, selecione a fazenda e toque em **Registrar irrigação**. Escolha um setor: a tela identifica o único dispositivo ativo. Informe a duração, considerada encerrada agora, ou as datas e horários de início e fim. Sem dispositivo ativo único, o registro fica bloqueado. O serviço exige vazão e potência positivas no dispositivo e tarifas válidas na fazenda.
+
+O formulário pode mostrar uma prévia de água, energia e custo após confirmação das unidades pelo responsável. Ao salvar, envia setor, início e duração em minutos a `/registroIrrigacao`; o servidor identifica o dispositivo, calcula e salva as estimativas e tarifas, mesmo sem marcar a caixa da prévia. Os valores são estimados, não medições.
+
+Na aba **Relatórios**, os gráficos usam `/registroIrrigacao/propriedade/{id}` para somar duração e estimativas de água e energia da fazenda. O histórico anterior de execuções de manejo continua disponível no módulo de manejo e não é misturado automaticamente aos novos registros.
 
 ## Clima em Leituras climáticas
 
-Entre em **Gestão > Clima > Leituras climáticas** para ver o cartão **Clima da fazenda**. Esse módulo exibe somente o cartão e não aparece em **Início**. O cartão mostra a primeira fazenda disponível para a conta. Quando houver várias, escolha no campo **Fazenda**. A seleção permanece em memória entre abas e atualizações e também define os setores do cartão **Plantios em andamento**. O clima solicita as estações vinculadas em `GET /propriedade/{id}/estacoes`.
+Entre em **Gest?o > Clima > Leituras clim?ticas** para abrir o cart?o **Clima da fazenda**. Ele solicita a esta??o vinculada em `GET /estacaoMetereologica/propriedade/{id}` e consulta o Open-Meteo diretamente. O cart?o usa nome e coordenadas e n?o apresenta a chave da esta??o.
 
 Fazendas, estações e seus vínculos são cadastrados no aplicativo web da outra equipe. Neste aplicativo, **Gestão → Propriedades** e **Gestão → Estações meteorológicas** permitem apenas consultar os registros. Não há seleção nem edição de estação no cartão.
 
@@ -81,9 +74,9 @@ O cartão de clima mostra apenas informações meteorológicas. Baterias dos sen
 
 ## Safras por fazenda
 
-Toque em **Plantios em andamento** no Início ou em **Plantios** na Gestão. A tela consulta todos os setores da fazenda selecionada. Setores sem plantio ativo oferecem **Cadastrar plantação**, com cultura cadastrada no backend, data de plantio e previsão opcional. Setores com plantio ativo mostram a cultura e oferecem **Registrar colheita**, somente com a data. Cada setor tem **Ver histórico produtivo**.
+Toque em **Plantios em andamento** no Início ou em **Plantios** na Gestão. A tela está implementada para uma API compatível, mas as rotas de safras que ela solicita estão ausentes no backend atual; plantio, colheita e histórico não concluem com essa cópia.
 
-As operações usam `/propriedade/{id}/safras/setores/...` e exigem token; o backend verifica a fazenda, o setor e o plantio. A colheita grava a data em `plantio.data_colheita_real` e conclui o plantio, sem tabela adicional. Não há comando de cadastro ou edição de setor no mobile. Após cada operação, a lista é atualizada. O backend valida o esquema do banco na inicialização e não cria tabelas automaticamente.
+Com uma API que implemente o contrato esperado, a colheita envia somente a data. O painel de irrigação usa outra rota, `GET /setor/propriedade/{id}`, disponível no backend atual.
 
 ## Verificação
 
@@ -93,6 +86,6 @@ flutter test
 flutter build web
 ```
 
-Os testes usam respostas HTTP simuladas apenas para conferir os contratos e a interface. Não existe alternativa simulada durante a execução normal. A validação de banco remoto e dos fluxos completos precisa ser feita com os dois serviços em execução, conforme o roteiro de integração.
+Os testes usam respostas HTTP simuladas apenas para conferir os contratos e a interface. Não existe alternativa simulada durante a execução normal. A validação integrada depende de ambiente seguro e das rotas necessárias.
 
 O mapa completo da integração e o roteiro de validação estão em [INTEGRACAO.md](INTEGRACAO.md).

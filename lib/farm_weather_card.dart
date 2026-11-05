@@ -118,15 +118,16 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
     });
     widget.onFarmChanged?.call(farm.id);
     try {
-      final rows = await widget.api.list(
-        'propriedade/${Uri.encodeComponent(farm.id)}/estacoes',
+      // The current backend exposes one linked station at this authenticated
+      // route. Do not use the removed /propriedade/{id}/estacoes endpoint.
+      final response = await widget.api.request(
+        'GET',
+        'estacaoMetereologica/propriedade/${Uri.encodeComponent(farm.id)}',
       );
       if (!mounted || generation != _generation) return;
-      _StationLocation? reference;
-      for (final row in rows) {
-        reference = _StationLocation.fromRow(row);
-        if (reference != null) break;
-      }
+      final reference = response is Map
+          ? _StationLocation.fromRow(Map<String, dynamic>.from(response))
+          : null;
       setState(() {
         _reference = reference;
         _referenceLoaded = true;

@@ -1,6 +1,20 @@
 # Integração Ghydro
 
-## Estado atual
+## Revisão de 04/11/2026 — backend selecionado
+
+Os registros abaixo descrevem integrações e cópias anteriores e podem divergir do backend atualmente em `Tcc-Back/GHydro-BackEnd`. O contrato presente no código e o `AGENTS.md` atualizado prevalecem sobre os relatos históricos.
+
+A cópia atual usa `spring.jpa.hibernate.ddl-auto=update` e contém credenciais e segredo JWT literais em arquivo versionado. A inicialização pode alterar o esquema remoto; não inicie esse backend nem testes de contexto contra o PostgreSQL até a configuração ser resolvida pelo responsável. Trate os segredos como potencialmente expostos. Não houve acesso ao banco durante esta revisão.
+
+Essa c?pia n?o implementa `GET`/`PUT /auth/me` ou `/propriedade/{id}/safras/...`. A esta??o vinculada ? consultada por `GET /estacaoMetereologica/propriedade/{id}` e o cart?o solicita o clima ao Open-Meteo. O login do frontend valida o token em `GET /dominios/moedas` e extrai claims para a interface; a edi??o de perfil e as telas existentes de safras seguem limitadas. O servidor decide as permiss?es e algumas rotas atuais n?o isolam todos os dados por produtor. O CORS global permite `http://localhost:4200`, porta padr?o atual do frontend.
+
+O painel consulta `GET /setor/propriedade/{id}`. Em Gestão > Monitoramento > Controle de irrigação, o formulário envia setor, data de início e duração em minutos para `POST /registroIrrigacao`. O novo serviço valida acesso ao setor, identifica o dispositivo ativo e calcula e salva estimativas de água, energia e custo. Os relatórios usam `GET /registroIrrigacao/propriedade/{id}`. Os registros legados de `/execucaoManejo` continuam separados. A nova entidade exige a tabela `registro_irrigacao`; não criar nem alterar tabelas automaticamente. A existência do esquema adequado precisa ser verificada pelo responsável antes de iniciar a nova cópia do backend em ambiente seguro.
+
+Na revisão dos testes unitários do backend em cópia temporária sem configurações de banco, três dos quatro testes originais de `SensorServiceTest` falharam por simulações desatualizadas. Com as simulações ajustadas apenas na cópia, os quatro passaram. Cinco testes adicionais isolados do serviço de irrigação passaram; não houve teste de contexto Spring nem validação com o PostgreSQL remoto. O repositório original do backend não foi alterado.
+
+A rota autenticada de estação retorna a entidade completa, que inclui o campo `apiKey`, e não valida o acesso à propriedade no serviço dessa consulta. O Flutter não apresenta esse campo, mas ele pode chegar ao navegador pela resposta HTTP. A equipe do backend deve restringir a resposta e validar o acesso. A entidade também contém leituras que referenciam a estação, podendo causar problemas de serialização quando houver leituras vinculadas.
+
+## Histórico — estado de integração anterior
 
 O frontend usa atualmente a API Spring Boot em `../../Tcc-Back/GHydro-BackEnd`, na Área de Trabalho, para autenticação e dados de negócio. O cartão de clima em **Gestão > Clima > Leituras climáticas** consulta diretamente o Open-Meteo. O script conjunto também aceita a pasta irmã `TCC-BACKAND` e uma pasta indicada com `-BackendPath`.
 
@@ -13,18 +27,18 @@ O frontend usa atualmente a API Spring Boot em `../../Tcc-Back/GHydro-BackEnd`, 
 
 Em 01/10/2026, uma execução anterior registrou os dois serviços ativos e conexão do backend com o PostgreSQL. Esse registro não valida os dados ou os fluxos atuais; `GET /auth/me`, CORS local, estações vinculadas e safras receberam mudanças depois daquela execução.
 
-## Execução local
+## Histórico — execução local anterior
 
 - Os scripts localizam a nova pasta e executam o backend com JDK 21 ou mais recente na porta 8081. A extensão Red Hat Java do VS Code atualizou o JDK embutido de 21 para 25 em 15/10/2026; o helper aceita essa versão, recompila com `clean compile` e o projeto permanece compilado para Java 21. O `clean compile` removeu um arquivo `.class` inválido que impedia a inicialização após a troca de JDK.
 
 Em 15/10/2026, `start-all.cmd` iniciou os dois serviços com o JDK 25 da extensão: o backend conectou ao PostgreSQL, o frontend respondeu HTTP 200 em `localhost:8080` e a API aceitou o preflight CORS dessa origem. A execução de teste foi encerrada para deixar as portas livres no VS Code.
 
-## Diferenças da cópia atual do backend
+## Histórico — diferenças da cópia anterior do backend
 
 - `GET /auth/me` existe e responde apenas `id`, `nome`, `email`, `role` e `cpf` ao usuário autenticado. `PUT /auth/me` não existe; a edição do perfil depende dessa rota.
 - O CORS global libera `http://localhost:8080` e `http://localhost:4200` por padrão. `CORS_ORIGINS` permite substituir a lista de origens.
 - `GET /propriedade/{id}/indicadores` entrega apenas os percentuais agregados da fazenda acessível à conta; o endpoint não expõe as entidades de sensores ou leituras.
-- `GET /propriedade/{id}/estacoes` verifica o acesso à fazenda e devolve apenas estações vinculadas, ordenadas por ID, com `id`, `nome`, `tipo`, `latitude`, `longitude`; omite `apiKey` e leituras. A previsão depende de vínculos reais na tabela `propriedade_estacao`.
+- `GET /estacaoMetereologica/propriedade/{id}` retorna a primeira estacao vinculada como entidade; o frontend consome nome e coordenadas para consultar o Open-Meteo e nao exibe `apiKey`. Confira a serializacao e a autorizacao dessa rota antes de usa-la em outros contextos.
 - As rotas `/propriedade/{id}/safras/...` listam setores e ciclos, criam plantio e registram colheita com autorização por fazenda. A colheita grava apenas `plantio.data_colheita_real` e conclui o plantio, sem tabela adicional.
 - O banco atual distingue `ADMIN`, `TECNICO` e `PRODUTOR`, sem role `PROPRIETARIO` nem tabela de autorização produtor–fazenda. Para `PRODUTOR`, o serviço de acesso considera `Usuario.proprietario` e o vínculo legado `Proprietario.usuarioId`, sempre pela propriedade do mesmo proprietário; conta sem vínculo não recebe fazendas. As listagens de fazenda, setor, plantio e recursos associados são filtradas por esses vínculos.
 - O cadastro público do backend salva `nome` e força `PRODUTOR`, ignorando qualquer tentativa de escolher `ADMIN` ou `TECNICO` no corpo. O formulário público do frontend envia `PRODUTOR`.
@@ -34,7 +48,7 @@ Em 15/10/2026, `start-all.cmd` iniciou os dois serviços com o JDK 25 da extens�
 - `application.properties` do backend usa variáveis `GHYDRO_DB_URL`, `GHYDRO_DB_USER`, `GHYDRO_DB_PASSWORD` e `GHYDRO_JWT_SECRET`, com importação opcional de `.env.properties` na raiz do backend. A configuração existente deste computador foi movida para esse arquivo local, ignorado pelo Git; `.env.properties.example` documenta as chaves sem valores reais. Na execução normal, Hibernate valida o esquema e não pode criar ou alterar tabelas. Os segredos antigos ainda existem no histórico do Git e precisam ser rotacionados por quem administra o banco e o JWT. Os testes usam H2 em `src/test/resources/application.properties` para não acessar o PostgreSQL remoto.
 - Requisições sem autenticação ou com JWT inválido retornam 401; um produtor autenticado sem acesso à fazenda recebe 403. O cliente usa o 401 para encerrar a sessão e mantém a sessão em 403.
 
-## Cobertura das telas
+## Histórico — cobertura das telas na versão anterior
 
 | Área | Rota da API | Operações na interface |
 | --- | --- | --- |
@@ -59,11 +73,11 @@ A tabela descreve os controles implementados no frontend, sem comprovar os fluxo
 
 Os editores genéricos não oferecem criação, inclusive nas listas vazias e quando abertos diretamente. `propriedade`, `setor` e `estacaoMetereologica` usam `ResourceSpec.readOnly: true` e não oferecem editar ou excluir, inclusive para `ADMIN` e `TECNICO`; o cadastro e as alterações desses recursos pertencem ao aplicativo web da equipe responsável. Nos demais recursos, edição e exclusão seguem as permissões anteriores.
 
-## Integração Open-Meteo
+## Histórico — integração Open-Meteo anterior
 
 O cartão **Clima da fazenda**, implementado por `FarmWeatherCard` em `lib/farm_weather_card.dart`, aparece sozinho em **Gestão > Clima > Leituras climáticas**; foi removido de **Início**. Esse módulo não exibe busca ou lista de leituras e não chama `/leituraClimatica`. O cartão recebe do painel as fazendas carregadas em `GET /propriedade`. Seleciona a primeira inicialmente e oferece o campo **Fazenda** quando há várias. `selectedFarmId` fica em memória no painel entre abas e atualizações, enquanto a fazenda continuar disponível.
 
-O cartão solicita `GET /propriedade/{id}/estacoes` para a fazenda selecionada e usa automaticamente a primeira estação vinculada com coordenadas válidas, em ordem crescente de ID. Não oferece seletor ou edição de estação; exibe seu nome como referência climática. Latitude e longitude vêm exclusivamente dessa estação, dentro dos intervalos -90 a 90 e -180 a 180. `propriedade.localizacao` é texto livre exibido como informação, sem extração de coordenadas ou geolocalização.
+O cartao solicita `GET /estacaoMetereologica/propriedade/{id}` para a fazenda selecionada e usa a estacao vinculada com coordenadas validas. Nao oferece seletor ou edicao de estacao; exibe seu nome como referencia climatica. Latitude e longitude vem exclusivamente dessa estacao, dentro dos intervalos -90 a 90 e -180 a 180. `propriedade.localizacao` e texto livre, sem extracao de coordenadas ou geolocalizacao.
 
 Fazendas, estações e vínculos são mantidos no aplicativo web da outra equipe. Sem fazenda disponível, associação ou coordenadas válidas, o cartão orienta solicitar a configuração nesse aplicativo. Não consulta a listagem global de estações nem usa uma localização de outra fazenda como alternativa. Troca de fazenda e atualização recarregam vínculos e clima; respostas antigas são ignoradas.
 
@@ -73,7 +87,7 @@ O cartão usa cores e superfícies do projeto, disposição adaptada a 320 px e 
 
 O backend ainda disponibiliza `GET /propriedade/{id}/indicadores` para consulta dos sensores da fazenda, mas o cartão **Clima da fazenda** não chama essa rota nem exibe baterias ou percentuais de umidade de sensores. O aviso de bateria baixa e o módulo de sensores permanecem no painel.
 
-## Safras e histórico produtivo
+## Histórico — safras e histórico produtivo anteriores
 
 O painel usa `GET /propriedade/{id}/safras/setores` para contar setores e plantios ativos apenas da fazenda selecionada. O cartão **Plantios em andamento** e o módulo **Plantios** abrem a tela de safras, que lista todos os setores dessa fazenda. A seleção é compartilhada com o clima e permanece em memória entre abas e recargas. A tela consulta as culturas em `GET /cultura` apenas quando o usuário abre o cadastro de plantio.
 
@@ -88,7 +102,7 @@ O DTO de plantio contém `id`, `setorId`, `setorNome`, `culturaId`, `culturaNome
 
 O registro de colheita grava `plantio.data_colheita_real` e muda `statusPlantio` para `CONCLUIDO` na mesma transação. O backend usa `ddl-auto=validate` na execução normal, sem criação ou alteração automática do esquema. A tabela `colheita_produtiva` gerada anteriormente pode continuar no PostgreSQL, mas esta versão não a mapeia nem usa; sua eventual remoção deve ser tratada separadamente após conferir os dados. Setores e estações continuam cadastrados no sistema web.
 
-## Validação da mudança atual
+## Histórico — validação da mudança anterior
 
 Os testes de interface usam HTTP simulado apenas no ambiente de teste e cobrem navegação até **Gestão > Clima > Leituras climáticas** sem cartão no **Início**, seleção de fazenda, setores em 320 px, cadastro, colheita, histórico, ausência de indicadores no clima e consulta Open-Meteo pelas coordenadas da estação vinculada. A suíte do backend com H2 testa autorização JWT, isolamento entre fazendas, IDs manipulados, duplicidade e ciclo completo sem acessar o PostgreSQL remoto. A validação com contas reais da equipe ainda precisa confirmar os vínculos `propriedade_estacao`, usuários vinculados a proprietários, setores, culturas e o fluxo de plantio e colheita.
 
@@ -112,7 +126,7 @@ O registro abaixo se refere à versão anterior em `TCC-BACKAND`. Esses ajustes 
 - Tratamento centralizado de erros de validação, conflito, acesso e recurso inexistente.
 - Configuração exclusiva do PostgreSQL remoto por variáveis de ambiente.
 
-## Limites do serviço existente
+## Histórico — limites do serviço anterior
 
 O repositório não contém integração com o equipamento físico do pivô, rotina de coleta automática dos sensores, gravação automática de estimativas Open-Meteo como leituras climáticas nem um algoritmo que gere recomendações. Também não existe recuperação de senha por e-mail ou uma referência histórica para calcular economia financeira.
 
