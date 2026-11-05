@@ -38,7 +38,7 @@ Não é necessário ler todos os arquivos para cada mudança. Use esta rota:
 ## Tecnologia e execução
 
 - Flutter com Dart SDK `^3.13.2` e Material 3.
-- Dependências de produção: Flutter, `http`, `cupertino_icons` e `flutter_localizations`.
+- Dependências de produção: Flutter, `http`, `image_picker`, `shared_preferences`, `cupertino_icons` e `flutter_localizations`.
 - Locale único: `pt_BR`.
 - Frontend web local: `http://localhost:4200` por padrão; `-WebPort` permite alterar a porta.
 - API local padrão: `http://localhost:8081`.
@@ -60,9 +60,9 @@ Comandos no Windows:
 .\start-front.cmd -ApiBaseUrl 'https://api.exemplo.com'
 ```
 
-O script conjunto procura o backend em `../TCC-BACKAND` ou em `Tcc-Back/GHydro-BackEnd` na Área de Trabalho do usuário. `-BackendPath` permite selecionar outra pasta. Ele inicia o backend em segundo plano, aguarda a porta 8081 por até dois minutos e mantém o Flutter no terminal atual. Uma porta 8081 já ocupada interrompe essa inicialização para evitar outra API concorrente; para usar a API existente, execute somente o frontend.
+O script conjunto procura o backend em `Tcc-Back/GHydro-BackEnd` na Área de Trabalho, `../TCC-BACKAND` ou na localização alternativa `TCC BACK/GHydro-BackEnd`. `-BackendPath` permite selecionar outra pasta. Ele inicia o backend em segundo plano, aguarda a porta 8081 por até dois minutos e mantém o Flutter no terminal atual. Uma porta 8081 já ocupada interrompe essa inicialização para evitar outra API concorrente; para usar a API existente, execute somente o frontend.
 
-O helper `start-backend.ps1` usa `start-backend.cmd` quando disponível ou o Maven wrapper para a versão Spring Boot 4 com JDK 21 ou mais recente; o projeto continua compilado para Java 21. Procura o JDK em `JAVA_HOME`, no `javac` do `PATH` e na extensão Red Hat Java do VS Code, alterando apenas o ambiente do processo. Antes de iniciar a API com Maven, executa `clean compile` para eliminar arquivos compilados inválidos após uma atualização do JDK. O Maven inicia com logs INFO e debug/trace desativados. Antes de emitir a saída dos launchers, o helper filtra linhas sensíveis e mascara valores de conexão e segredo carregados em memória, inclusive no arquivo local `.env.properties`. O script do frontend também reconhece Flutter em `C:\flutter\bin\flutter.bat`.
+O helper `start-backend.ps1` exige o Maven wrapper e procura um JDK 21 ou mais recente em `JAVA_HOME`, no `PATH`, nas instalações Java e na extensão Red Hat Java do VS Code. Compila uma cópia temporária do backend e passa `spring.jpa.hibernate.ddl-auto=none` ao processo, preservando a pasta original. A saída é filtrada para ocultar valores sensíveis. O script do frontend também reconhece Flutter em `C:\flutter\bin\flutter.bat`.
 
 Na cópia atual do backend, `application.properties` contém credenciais e segredo em valores literais e define `spring.jpa.hibernate.ddl-auto=update`; a inicialização pode alterar o esquema do PostgreSQL. Não inicie esse backend nem seus testes de contexto contra o banco remoto até o responsável resolver a configuração. Não reproduza valores sensíveis em logs, telas ou documentação. Os segredos devem ser tratados como potencialmente expostos e sua rotação deve ser discutida com o responsável.
 
@@ -72,7 +72,7 @@ A cópia atual em `Tcc-Back/GHydro-BackEnd` não implementa `GET /auth/me` ou `P
 
 O backend atual expoe `GET /estacaoMetereologica/propriedade/{id}`, autenticada, que retorna uma estacao como entidade. O cartao usa essa rota e so le nome e coordenadas; nunca mostra `apiKey`. A API nao oferece `GET /propriedade/{id}/estacoes`.
 
-O backend tem `ADMIN`, `TECNICO` e `PRODUTOR`. A cópia atual não implementa as rotas `/propriedade/{id}/safras/...` usadas por `FarmPlantingScreen`; plantio, colheita e histórico nessa tela permanecem limitados. `GET /setor/propriedade/{id}` retorna setores com plantios aninhados e é usado no painel e na irrigação. Várias listagens e operações do backend não fazem isolamento completo por produtor; filtragem visual não substitui autorização no servidor. Consulte `INTEGRACAO.md` para o histórico e suas ressalvas.
+O backend tem `ADMIN`, `TECNICO` e `PRODUTOR`. `FarmPlantingScreen` usa `GET /setor/propriedade/{id}`, `POST /plantio` e `PUT /plantio/{id}`, rotas presentes na cópia atual. Várias listagens e operações do backend não fazem isolamento completo por produtor; filtragem visual não substitui autorização no servidor. Consulte `INTEGRACAO.md` para o histórico e suas ressalvas.
 
 ## Estrutura do código
 
@@ -88,7 +88,8 @@ O backend tem `ADMIN`, `TECNICO` e `PRODUTOR`. A cópia atual não implementa as
 | `lib/irrigation_control_screen.dart` | módulo de controle de irrigação, escolha da fazenda e acesso ao registro |
 | `lib/irrigation_screen.dart` | seleção de setor, identificação de equipamento ativo e registro do intervalo de irrigação |
 | `lib/farm_weather_card.dart` | `FarmWeatherCard`, seleção de fazenda, consulta da referência vinculada e estados de carregamento/erro/vazio |
-| `lib/farm_planting_screen.dart` | setores da fazenda selecionada, início de plantio, registro de colheita e histórico produtivo |
+| `lib/farm_planting_screen.dart` | setores e plantios da fazenda, registro de plantio, colheita e histórico produtivo |
+| `lib/profile_photo_service.dart` | serviço opcional de foto local injetável; a tela padrão mantém a foto apenas em memória |
 | `lib/open_meteo_service.dart` | cliente Open-Meteo, validação de coordenadas e leitura das condições atuais e probabilidade horária |
 | `lib/resource_schema.dart` | metadados, campos, enums e relações dos 16 recursos |
 | `lib/resource_screen.dart` | listagem, detalhes, edição e exclusão genéricos |
@@ -189,9 +190,9 @@ O callback de sessão expirada é instalado em `initState()` e removido em `disp
 
 ### Safras e setores
 
-- `FarmPlantingScreen` continua implementada para APIs que exponham `/propriedade/{id}/safras/...`, mas essas rotas não existem na cópia atual do backend. Com ela, a tela mostra erro e suas ações de plantio, colheita e histórico não concluem.
-- Numa API compatível, cada setor exibe o plantio ativo ou em descanso; o formulário de colheita envia somente `{dataColheita}`. A tela oferece recarga e ignora respostas antigas ao trocar de fazenda.
-- O painel usa `GET /setor/propriedade/{id}` para contagens e registro de irrigação; isso não adapta nem garante os fluxos existentes da tela de safras.
+- A tela usa `GET /setor/propriedade/{id}` e os plantios aninhados para mostrar safras atuais e histórico. `ADMIN`, `TECNICO` e `PRODUTOR` podem registrar plantio e colheita conforme a autorização do servidor.
+- Plantio usa `POST /plantio` com setor, cultura, data, previsão opcional e situação `EM_ANDAMENTO`. A tela verifica novamente o setor e impede envio quando já existe plantio não concluído; essa verificação não é atômica no backend.
+- A colheita solicita somente a data ao usuário e usa `PUT /plantio/{id}` com essa data, status concluído e dados necessários para preservar o plantio. Não solicita nem envia quantidade produzida ou unidade de medida.
 
 ### Clima em Leituras climáticas
 
@@ -245,7 +246,7 @@ O callback de sessão expirada é instalado em `initState()` e removido em `disp
 
 - Faz `GET /<path>` e mostra a resposta em ordem reversa.
 - Ignora respostas antigas usando um contador de geração quando há carregamentos concorrentes.
-- Busca local compara o texto digitado com todos os valores exibíveis da linha, sem diferenciar maiúsculas.
+- Busca local compara o texto digitado com valores exibíveis da linha, excluindo `apiKey`, sem diferenciar maiúsculas.
 - Se houver `status` ou `statusPlantio`, cria filtros com `ChoiceChip`.
 - Paginação é local, com 12 registros por página.
 - Tocar no registro abre detalhes em diálogo.
@@ -255,7 +256,7 @@ O callback de sessão expirada é instalado em `initState()` e removido em `disp
 - `propriedade`, `setor` e `estacaoMetereologica` são somente leitura para todos os perfis. O editor desses recursos não carrega relações nem apresenta formulário de escrita, mesmo quando aberto diretamente.
 - Exclusão sempre exige confirmação explícita e alerta sobre vínculos dependentes.
 - Erros preservam a tela e oferecem nova tentativa.
-- Em manutenções, o menu inclui histórico do equipamento em `GET /admin/manutencao/equipamento/<tipoEquipamento>/<equipamentoId>`.
+- Em manutenções, o menu inclui histórico do equipamento em `GET /manutencao/equipamento/<tipoEquipamento>/<equipamentoId>`.
 
 ### Editor e serialização
 
@@ -294,8 +295,7 @@ Um campo sem `?` é obrigatório. `?` indica opcional. `-> recurso` indica rela�
 | Fazenda | `/setor` | somente leitura; `nome`, `poligonoGeografico`, `propriedade -> propriedade`, `tipoSolo -> tipoSolo` |
 | Cultivo | `/cultura` | `nomePopular`, `variedade`, `nomeCientifico?` |
 | Cultivo | `/estadoFenologico` | `cultura -> cultura`, `nomeFase`, `descricaoFase?`, `ordemSequencia`, `duracaoDias`, `kCFase?`, `profundidadeRaiz_cm?`, `sensibilidadeKY?` |
-| Cultivo | `/plantio` | módulo abre a tela de safras por fazenda; os metadados do editor genérico preservam `cultura -> cultura`, `setor -> setor`, `dataPlantio`, `dataColheitaEstimada?`, `statusPlantio` |
-| Cultivo | `/propriedade/{id}/safras/...` | contrato esperado pela tela de safras, ausente no backend atual |
+| Cultivo | `/plantio` | módulo usa os setores da fazenda, cria plantio com cultura, setor e datas, e registra colheita atualizando o plantio |
 | Monitoramento | `/dispositivoIrrigacao` | módulo abre o controle de irrigação; metadados preservam `nome`, `tipoDispositivo`, `setor -> setor`, `eficienciaIrrigacao?`, `vazaoNominal?`, `potenciaMotor?` |
 | Monitoramento | `/sensor` | `setor -> setor`, `tipos[]`, `status`, `dataInstalacao`, `nivelBateria?` |
 | Monitoramento | `/leituraSensor` | `sensor -> sensor`, `timestamp`, `valorBruto`, `valorTratado`, `unidadeMedida` |
@@ -305,7 +305,7 @@ Um campo sem `?` é obrigatório. `?` indica opcional. `-> recurso` indica rela�
 | Manejo | `/execucaoManejo` | `plantio -> plantio`, `recomendacao? -> recomendacao`, `inicio`, `fim?`, `volumeAguaAplicado?`, `energiaGasta?`, `origem`; histórico de manejo anterior |
 | Monitoramento | `/registroIrrigacao` | registro por `setorId`, `dataIrrigacao` e `duracaoMinutos`; relatório por propriedade |
 | Gestão | `/configuracaoCusto` | `propriedade -> propriedade`, `custoM3Agua`, `custoKWh`, `moeda` |
-| Gestão | `/admin/manutencao` | `tipoEquipamento`, `equipamentoId`, `tipoManutencao`, `dataManutencao`, `descricaoProblema?`, `solucaoAplicada?`, `tecnicoResponsavel?`; somente equipe |
+| Gestão | `/manutencao` | `tipoEquipamento`, `equipamentoId`, `tipoManutencao`, `dataManutencao`, `descricaoProblema?`, `solucaoAplicada?`, `tecnicoResponsavel?`; somente equipe |
 
 Não corrija a grafia da rota `estacaoMetereologica` apenas no frontend: essa grafia faz parte do contrato atual do backend.
 
@@ -313,7 +313,7 @@ Não corrija a grafia da rota `estacaoMetereologica` apenas no frontend: essa gr
 
 - Plantio: `PLANEJADO`, `EM_ANDAMENTO`, `CONCLUIDO`.
 - Dispositivo: `PIVO`, `ASPERSOR`, `GOTEJAMENTO`, `TUBO_PERFURADO`, `MICROASPERSOR`.
-- Sensor/status: `ATIVO`, `INATIVO`, `MANUTENCAO`.
+- Sensor/status: `ATIVO`, `INATIVO`, `MANUTENCAO`, `SEM_RESPOSTA`.
 - Sensor/grandezas: `TEMPERATURA`, `UMIDADE`, `VAZAO`, `PRESSAO`, `TENSAO`.
 - Unidade: `PORCENTAGEM`, `GRAUS_CELSIUS`, `PPM`, `KPA`.
 - Estação: `FISICA`, `VIRTUAL`.

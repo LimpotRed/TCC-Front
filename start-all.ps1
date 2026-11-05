@@ -22,14 +22,14 @@ function Test-BackendPort {
 
 if ([string]::IsNullOrWhiteSpace($BackendPath)) {
     $backendCandidates = @(
+        (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Tcc-Back\GHydro-BackEnd'),
         (Join-Path (Split-Path $frontendPath -Parent) 'TCC-BACKAND'),
-        (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Tcc-Back\GHydro-BackEnd')
+        (Join-Path ([Environment]::GetFolderPath('Desktop')) 'TCC BACK\GHydro-BackEnd')
     )
     $BackendPath = $backendCandidates |
         Where-Object {
             (Test-Path -LiteralPath $_ -PathType Container) -and
-            ((Test-Path -LiteralPath (Join-Path $_ 'start-backend.cmd') -PathType Leaf) -or
-                (Test-Path -LiteralPath (Join-Path $_ 'mvnw.cmd') -PathType Leaf))
+            (Test-Path -LiteralPath (Join-Path $_ 'mvnw.cmd') -PathType Leaf)
         } |
         Select-Object -First 1
     if (-not $BackendPath) {
@@ -41,7 +41,6 @@ if (-not (Test-Path -LiteralPath $BackendPath -PathType Container)) {
 }
 $backendPath = (Resolve-Path -LiteralPath $BackendPath).Path
 
-$backendScript = Join-Path $backendPath 'start-backend.cmd'
 $mavenWrapper = Join-Path $backendPath 'mvnw.cmd'
 $backendHelper = Join-Path $frontendPath 'start-backend.ps1'
 $frontendScript = Join-Path $frontendPath 'start-front.ps1'
@@ -50,9 +49,8 @@ if (Test-BackendPort) {
     throw 'A porta 8081 já está em uso. Para usar a API em execução, inicie apenas .\start-front.cmd.'
 }
 
-if (-not (Test-Path -LiteralPath $backendScript -PathType Leaf) -and
-    -not (Test-Path -LiteralPath $mavenWrapper -PathType Leaf)) {
-    throw "Nenhum start-backend.cmd ou mvnw.cmd encontrado em: $backendPath"
+if (-not (Test-Path -LiteralPath $mavenWrapper -PathType Leaf)) {
+    throw "Maven wrapper não encontrado em: $backendPath"
 }
 # Start-Process une os argumentos; as aspas preservam os caminhos completos.
 $backendArguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -BackendPath "{1}"' -f $backendHelper, $backendPath

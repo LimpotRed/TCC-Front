@@ -188,7 +188,9 @@ class _ResourceScreenState extends State<ResourceScreen> {
     final visible = _rows
         .where(
           (row) =>
-              row.values
+              row.entries
+                  .where((entry) => entry.key != 'apiKey')
+                  .map((entry) => entry.value)
                   .map(displayValue)
                   .join(' ')
                   .toLowerCase()
@@ -345,7 +347,7 @@ class _ResourceScreenState extends State<ResourceScreen> {
                                 }
                               },
                               itemBuilder: (_) => [
-                                if (spec.path == 'admin/manutencao')
+                                if (spec.path == 'manutencao')
                                   const PopupMenuItem(
                                     value: 'history',
                                     child: Text('Histórico do equipamento'),

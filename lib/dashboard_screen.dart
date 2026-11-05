@@ -12,6 +12,7 @@ import 'resource_schema.dart';
 import 'resource_screen.dart';
 import 'farm_weather_card.dart';
 import 'irrigation_control_screen.dart';
+import 'profile_photo_service.dart';
 
 const _background = Color(0xFF15142F);
 const _surface = Color(0xFF242144);
@@ -27,11 +28,13 @@ class DashboardScreen extends StatefulWidget {
     required this.email,
     required this.onLogout,
     this.weatherService,
+    this.photoService,
   });
   final AuthService auth;
   final String name, email;
   final void Function(BuildContext) onLogout;
   final OpenMeteoService? weatherService;
+  final ProfilePhotoService? photoService;
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
@@ -214,18 +217,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _chooseProfilePhoto() async {
     try {
-      final image = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1200,
-        imageQuality: 85,
-      );
-      if (image == null) return;
-      final bytes = await image.readAsBytes();
+      final Uint8List? bytes;
+      if (widget.photoService != null) {
+        bytes = await widget.photoService!.chooseAndSave(widget.email);
+      } else {
+        final image = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1200,
+          imageQuality: 85,
+        );
+        bytes = await image?.readAsBytes();
+      }
+      if (bytes == null) return;
       if (mounted) setState(() => _profilePhoto = bytes);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Não foi possível abrir a foto.')),
+      );
+    }
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    try {
+      await widget.photoService?.remove(widget.email);
+      if (mounted) setState(() => _profilePhoto = null);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível remover a foto.')),
       );
     }
   }
@@ -285,6 +305,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (_) => FarmPlantingScreen(
           api: widget.auth.api,
           farms: rows('propriedade'),
+          canManagePlantings: widget.auth.canManagePlantings,
           selectedFarmId: _selectedFarmId,
           onFarmChanged: _selectFarm,
         ),
@@ -829,9 +850,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onPressed: choosePhoto,
                     icon: const Icon(Icons.photo_camera_outlined),
                     label: Text(
-                      photo == null ? 'Adicionar foto' : 'Trocar foto',
+                      photo == null ? 'Adicionar foto' : 'Alterar foto',
                     ),
                   ),
+                  if (photo != null)
+                    TextButton(
+                      onPressed: _removeProfilePhoto,
+                      child: const Text('Remover foto'),
+                    ),
                 ],
               ),
             ),

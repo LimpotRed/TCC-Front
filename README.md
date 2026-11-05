@@ -1,8 +1,10 @@
-# Ghydro — frontend
+# 🌱 GHydro — Aplicativo Mobile Flutter
 
-Aplicativo Flutter conectado ao backend Spring Boot. O script de execução procura o backend na pasta irmã `TCC-BACKAND` ou em `Tcc-Back\GHydro-BackEnd` na Área de Trabalho do usuário.
+O GHydro é um sistema de gestão e monitoramento agrícola desenvolvido como Trabalho de Conclusão de Curso em Engenharia de Software. O aplicativo Flutter ajuda o produtor a acompanhar propriedades, setores, sensores, clima, plantios e irrigações.
 
-O backend atualmente selecionado esta em `../../Tcc-Back/GHydro-BackEnd`. Essa copia nao oferece `GET` ou `PUT /auth/me` nem as rotas `/propriedade/{id}/safras/...` usadas pela tela de safras. O login valida o token em `/dominios/moedas`; a foto de perfil e apenas de sessao. O cartao climatico consulta a estacao vinculada em `GET /estacaoMetereologica/propriedade/{id}`. Veja o aviso no inicio de [INTEGRACAO.md](INTEGRACAO.md).
+A solução reúne um backend Java com Spring Boot e PostgreSQL, um sistema web administrativo e este aplicativo mobile. Este repositório contém o frontend Flutter. O script de execução procura o backend na pasta irmã `TCC-BACKAND` ou em `Tcc-Back\GHydro-BackEnd` na Área de Trabalho do usuário.
+
+O backend atualmente selecionado está em `../../Tcc-Back/GHydro-BackEnd`. Essa cópia não oferece `GET` ou `PUT /auth/me`. O login valida o token em `/dominios/moedas`; a foto de perfil é apenas de sessão. O cartão climático consulta a estação vinculada em `GET /estacaoMetereologica/propriedade/{id}`. A tela de safras usa as rotas de setor e plantio disponíveis nessa cópia. Veja o aviso no início de [INTEGRACAO.md](INTEGRACAO.md).
 
 **Banco:** a cópia atual do backend usa `ddl-auto=update` e pode criar ou alterar tabelas no PostgreSQL remoto. Não inicie essa cópia nem seus testes de contexto até que o responsável resolva a configuração. O arquivo versionado também contém credenciais e segredo JWT; trate-os como potencialmente expostos.
 
@@ -24,7 +26,7 @@ O script conjunto inicia backend e frontend; use-o somente depois de confirmar q
 .\start-all.cmd -BackendPath 'C:\caminho\de\uma-api-segura'
 ```
 
-O backend pode ter `start-backend.cmd` ou `mvnw.cmd`. Neste último caso, `start-backend.ps1` recompila o backend com `clean compile` e executa `spring-boot:run` na porta 8081, usando JDK 21 ou mais recente. Ele procura o JDK em `JAVA_HOME`, no `javac` do `PATH` e no Java instalado pela extensão Red Hat Java do VS Code. A seleção altera o ambiente somente do processo do backend, sem configuração permanente do Windows.
+O backend precisa ter `mvnw.cmd`. O helper `start-backend.ps1` compila uma cópia temporária e usa `spring.jpa.hibernate.ddl-auto=none`, preservando a pasta original. Ele usa JDK 21 ou mais recente, localizado por `JAVA_HOME`, `PATH`, instalações Java ou extensão Red Hat Java do VS Code. A seleção altera o ambiente somente do processo do backend.
 
 O frontend procura Flutter no `PATH`, em `C:\flutter\bin\flutter.bat` e, como alternativa, em `C:\Users\Aluno\develop\flutter\bin\flutter.bat`.
 
@@ -40,9 +42,9 @@ O frontend usa `http://localhost:8081` como API por padrão. Para apontar para u
 
 - Cadastro público de conta e login; a edição do perfil depende de `PUT /auth/me`, ausente no backend atual.
 - Visão geral com seleção de fazenda, atualização a cada 60 segundos, setores, plantios e sensores. O controle de irrigação fica na Gestão.
-- Cartão de clima em **Gestão > Clima > Leituras climáticas** usa a estação vinculada; a tela de safras depende de rotas ausentes no backend atual.
+- Cartão de clima em **Gestão > Clima > Leituras climáticas** usa a estação vinculada; a tela de safras consulta setores e plantios da fazenda.
 - Consulta de fazendas, setores e estações cadastrados no aplicativo web da outra equipe, sem comandos de escrita para esses recursos.
-- Consulta, edição e exclusão dos demais módulos conforme as permissões; a criação após o login existe nos fluxos específicos de irrigação e de safras, cuja API está ausente na cópia atual.
+- Consulta, edição e exclusão dos demais módulos conforme as permissões; a criação após o login existe nos fluxos específicos de irrigação e de safras.
 - Pesquisa, filtros de situação, paginação visual, detalhes e confirmação antes de excluir.
 - Seletores de relacionamentos, datas, horários e enumerações nos formulários disponíveis.
 - Histórico administrativo de manutenções.
@@ -74,9 +76,9 @@ O cartão de clima mostra apenas informações meteorológicas. Baterias dos sen
 
 ## Safras por fazenda
 
-Toque em **Plantios em andamento** no Início ou em **Plantios** na Gestão. A tela está implementada para uma API compatível, mas as rotas de safras que ela solicita estão ausentes no backend atual; plantio, colheita e histórico não concluem com essa cópia.
+Toque em **Plantios em andamento** no Início ou em **Plantios** na Gestão. A tela consulta os setores e seus plantios, mostra o histórico e oferece registro de plantio e colheita para os perfis permitidos.
 
-Com uma API que implemente o contrato esperado, a colheita envia somente a data. O painel de irrigação usa outra rota, `GET /setor/propriedade/{id}`, disponível no backend atual.
+A colheita solicita somente a data ao usuário e envia ao backend os dados necessários para concluir o plantio. Não existem campos de quantidade produzida ou unidade de medida. A criação de um novo plantio exige setor sem plantio não concluído.
 
 ## Verificação
 
@@ -89,3 +91,13 @@ flutter build web
 Os testes usam respostas HTTP simuladas apenas para conferir os contratos e a interface. Não existe alternativa simulada durante a execução normal. A validação integrada depende de ambiente seguro e das rotas necessárias.
 
 O mapa completo da integração e o roteiro de validação estão em [INTEGRACAO.md](INTEGRACAO.md).
+
+## Tecnologias e contexto
+
+O aplicativo usa Flutter e Dart, uma API REST com autenticação JWT e a API Open-Meteo para consultas climáticas. A solução completa integra Spring Boot, PostgreSQL, sensores e um sistema web administrativo.
+
+O GHydro é um projeto acadêmico que integra desenvolvimento mobile, sistemas web, APIs e Internet das Coisas.
+
+**Desenvolvedor:** Lucas Lopes Bastos
+
+**GitHub:** [LimpotRed](https://github.com/LimpotRed)

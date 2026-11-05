@@ -59,7 +59,10 @@ class ApiClient {
           path == 'auth/login'
               ? 'E-mail ou senha incorretos.'
               : 'Sua sessão expirou. Entre novamente.',
-        403 => 'Seu perfil não permite esta operação.',
+        403 =>
+          path == 'auth/login'
+              ? 'E-mail ou senha incorretos.'
+              : 'Seu perfil não permite esta operação.',
         404 => 'Registro não encontrado. Atualize a lista.',
         409 => 'O registro está vinculado a outros dados ou já existe.',
         _ => 'Não foi possível concluir a operação. Tente novamente.',

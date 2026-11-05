@@ -9,6 +9,8 @@ class AuthService {
   final ApiClient api;
   Map<String, dynamic>? profile;
   bool get canManage => ['ADMIN', 'TECNICO'].contains(profile?['role']);
+  bool get canManagePlantings =>
+      ['ADMIN', 'TECNICO', 'PRODUTOR'].contains(profile?['role']);
   Future<void> register({
     required String name,
     required String email,

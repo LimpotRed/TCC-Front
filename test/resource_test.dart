@@ -93,7 +93,7 @@ const examples = <String, Map<String, dynamic>>{
     'custoKWh': 0.8,
     'moeda': 'BRL',
   },
-  'admin/manutencao': {
+  'manutencao': {
     'tipoEquipamento': 'PIVO',
     'equipamentoId': 1,
     'tipoManutencao': 'PREVENTIVA',
@@ -300,7 +300,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
   });
-  for (final endpoint in ['cultura', 'admin/manutencao']) {
+  for (final endpoint in ['cultura', 'manutencao']) {
     testWidgets('Exclusão de $endpoint exige confirmação e usa rota correta', (
       tester,
     ) async {
@@ -348,7 +348,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         deletePath,
-        endpoint == 'cultura' ? '/cultura/9/' : '/admin/manutencao/9',
+        endpoint == 'cultura' ? '/cultura/9/' : '/manutencao/9',
       );
       expect(find.text('Nenhum registro por aqui ainda'), findsOneWidget);
     });

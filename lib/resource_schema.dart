@@ -84,6 +84,7 @@ String displayValue(dynamic value) {
     'ATIVO': 'Ativo',
     'INATIVO': 'Inativo',
     'MANUTENCAO': 'Em manutenção',
+    'SEM_RESPOSTA': 'Sem resposta',
     'PIVO': 'Pivô',
     'ASPERSOR': 'Aspersor',
     'GOTEJAMENTO': 'Gotejamento',
@@ -386,7 +387,7 @@ const resources = [
         'status',
         'Situação',
         kind: FieldKind.choice,
-        options: ['ATIVO', 'INATIVO', 'MANUTENCAO'],
+        options: ['ATIVO', 'INATIVO', 'MANUTENCAO', 'SEM_RESPOSTA'],
       ),
       DataField('dataInstalacao', 'Instalação', kind: FieldKind.dateTime),
       DataField(
@@ -637,7 +638,7 @@ const resources = [
     ],
   ),
   ResourceSpec(
-    'admin/manutencao',
+    'manutencao',
     'Manutenções',
     'Manutenção',
     'Gestão',
