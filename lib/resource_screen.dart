@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'app_theme.dart';
+
 import 'api_client.dart';
 import 'resource_schema.dart';
 
-const panelColor = Color(0xFF242144);
-const accentColor = Color(0xFF36C9D8);
 const _readOnlyNotice =
     'Os cadastros e as alterações são feitos no aplicativo web da equipe responsável. Aqui, você pode consultar os dados.';
 
@@ -144,8 +144,8 @@ class _ResourceScreenState extends State<ResourceScreen> {
                       children: [
                         Text(
                           field.label,
-                          style: const TextStyle(
-                            color: accentColor,
+                          style: TextStyle(
+                            color: AppColors.of(context).cyan,
                             fontSize: 12,
                           ),
                         ),
@@ -224,13 +224,24 @@ class _ResourceScreenState extends State<ResourceScreen> {
             children: [
               Text(
                 spec.description,
-                style: const TextStyle(color: Color(0xFFBDB6D3)),
+                style: TextStyle(color: AppColors.of(context).muted),
               ),
+              if (spec.path == 'proprietario')
+                const Padding(
+                  padding: EdgeInsets.only(top: 10),
+                  child: Text(
+                    'Esta lista é fornecida pelo servidor, que atualmente não filtra os proprietários pelo usuário.',
+                  ),
+                ),
               if (!_canWrite)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Text(
-                    spec.readOnly ? _readOnlyNotice : 'Consulta dos dados disponíveis para sua conta. Alterações são realizadas pela equipe técnica.',
+                    spec.readOnly
+                        ? _readOnlyNotice
+                        : spec.path == 'proprietario'
+                        ? 'Alterações são realizadas pela equipe técnica.'
+                        : 'Consulta dos dados disponíveis para sua conta. Alterações são realizadas pela equipe técnica.',
                   ),
                 ),
               const SizedBox(height: 20),
@@ -293,7 +304,11 @@ class _ResourceScreenState extends State<ResourceScreen> {
                   padding: const EdgeInsets.all(32),
                   child: Column(
                     children: [
-                      Icon(spec.icon, size: 48, color: accentColor),
+                      Icon(
+                        spec.icon,
+                        size: 48,
+                        color: AppColors.of(context).cyan,
+                      ),
                       const SizedBox(height: 14),
                       Text(
                         _rows.isEmpty
@@ -307,14 +322,17 @@ class _ResourceScreenState extends State<ResourceScreen> {
               if (!_busy && _error == null) ...[
                 for (final row in visible.skip(_page * pageSize).take(pageSize))
                   Card(
-                    color: panelColor,
+                    color: AppColors.of(context).surface,
                     margin: const EdgeInsets.only(bottom: 12),
                     child: ListTile(
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 18,
                         vertical: 12,
                       ),
-                      leading: Icon(spec.icon, color: accentColor),
+                      leading: Icon(
+                        spec.icon,
+                        color: AppColors.of(context).cyan,
+                      ),
                       title: Text(spec.label(row)),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 6),
@@ -405,7 +423,7 @@ class ErrorPanel extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          const Icon(Icons.cloud_off_outlined, color: accentColor),
+          Icon(Icons.cloud_off_outlined, color: AppColors.of(context).cyan),
           const SizedBox(height: 10),
           Text(message, textAlign: TextAlign.center),
           TextButton(onPressed: retry, child: const Text('Tentar novamente')),
@@ -769,8 +787,8 @@ class _ResourceEditorState extends State<ResourceEditor> {
                                 liveRegion: true,
                                 child: Text(
                                   _error!,
-                                  style: const TextStyle(
-                                    color: Color(0xFFFFB4AB),
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
                                   ),
                                 ),
                               ),

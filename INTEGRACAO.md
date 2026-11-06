@@ -1,5 +1,7 @@
 # Integração Ghydro
 
+Na versão atual, o aplicativo oferece apenas login e não envia cadastro de contas. Os relatos abaixo sobre cadastro no frontend são históricos. A rota pública de cadastro do backend continua disponível e depende da equipe responsável para ser restringida.
+
 ## Revisão de 04/11/2026 — backend selecionado
 
 Os registros abaixo descrevem integrações e cópias anteriores e podem divergir do backend atualmente em `Tcc-Back/GHydro-BackEnd`. O contrato presente no código e o `AGENTS.md` atualizado prevalecem sobre os relatos históricos.

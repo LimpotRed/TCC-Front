@@ -113,47 +113,30 @@ void main() {
     },
   );
 
-  test(
-    'Cadastro envia nome e senha à API; login usa JWT e perfil do servidor',
-    () async {
-      final requests = <http.Request>[];
-      final token = testToken(role: 'TECNICO');
-      final auth = AuthService(
-        api: ApiClient(
-          client: MockClient((r) async {
-            requests.add(r);
-            if (r.url.path == '/auth/register') {
-              return jsonResponse({'message': 'Criado'});
-            }
-            if (r.url.path == '/auth/login') {
-              return jsonResponse({'token': token});
-            }
-            expect(r.headers['Authorization'], 'Bearer $token');
-            return jsonResponse(['BRL']);
-          }),
-        ),
-      );
-      await auth.register(
-        name: 'Lucas',
-        email: ' LUCAS@example.com ',
-        password: 'senha12345',
-      );
-      expect(jsonDecode(requests.first.body), {
-        'nome': 'Lucas',
-        'email': 'lucas@example.com',
-        'senha': 'senha12345',
-        'role': 'PRODUTOR',
-      });
-      expect(
-        await auth.signIn(email: 'lucas@example.com', password: 'senha12345'),
-        'Lucas',
-      );
-      expect(auth.canManage, isTrue);
-      auth.signOut();
-      expect(auth.api.token, isNull);
-      expect(auth.profile, isNull);
-    },
-  );
+  test('Login usa JWT e perfil do servidor', () async {
+    final requests = <http.Request>[];
+    final token = testToken(role: 'TECNICO');
+    final auth = AuthService(
+      api: ApiClient(
+        client: MockClient((r) async {
+          requests.add(r);
+          if (r.url.path == '/auth/login') {
+            return jsonResponse({'token': token});
+          }
+          expect(r.headers['Authorization'], 'Bearer $token');
+          return jsonResponse(['BRL']);
+        }),
+      ),
+    );
+    expect(
+      await auth.signIn(email: 'lucas@example.com', password: 'senha12345'),
+      'Lucas',
+    );
+    expect(auth.canManage, isTrue);
+    auth.signOut();
+    expect(auth.api.token, isNull);
+    expect(auth.profile, isNull);
+  });
   test('Erro de login não cria sessão nem ignora falha no perfil', () async {
     final auth = AuthService(
       api: ApiClient(
@@ -214,7 +197,7 @@ void main() {
       expect(await api.request('DELETE', 'sensor/1/'), isNull);
     },
   );
-  testWidgets('Cadastro, validação, erro do servidor e entrada no painel', (
+  testWidgets('Login sem cadastro, erro do servidor e entrada no painel', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(600, 1100));
@@ -222,9 +205,6 @@ void main() {
     final auth = AuthService(
       api: ApiClient(
         client: MockClient((r) async {
-          if (r.url.path == '/auth/register') {
-            return jsonResponse({'message': 'Criado'});
-          }
           if (r.url.path == '/auth/login') {
             if (jsonDecode(r.body)['senha'] == 'errada') {
               return jsonResponse({
@@ -238,29 +218,29 @@ void main() {
       ),
     );
     await tester.pumpWidget(MaterialApp(home: LoginScreen(auth: auth)));
-    await tester.ensureVisible(find.text('Crie agora'));
-    await tester.tap(find.text('Crie agora'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('name')), 'Lucas');
+    expect(find.text('Crie agora'), findsNothing);
+    expect(find.text('Criar conta'), findsNothing);
+    expect(find.byKey(const ValueKey('name')), findsNothing);
+    expect(find.byKey(const ValueKey('confirm')), findsNothing);
     await tester.enterText(
       find.byKey(const ValueKey('email')),
       'lucas@example.com',
     );
-    await tester.enterText(
-      find.byKey(const ValueKey('password')),
-      'senha12345',
-    );
-    await tester.enterText(find.byKey(const ValueKey('confirm')), 'diferente');
-    await tester.ensureVisible(find.text('Criar conta'));
-    await tester.tap(find.text('Criar conta'));
-    await tester.pumpAndSettle();
-    expect(find.text('As senhas não coincidem.'), findsOneWidget);
-    await tester.enterText(find.byKey(const ValueKey('confirm')), 'senha12345');
-    await tester.tap(find.text('Criar conta'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('password')));
+    await tester.enterText(find.byKey(const ValueKey('password')), 'teste');
+    await tester.tap(find.byTooltip('Mostrar senha'));
+    expect(tester.testTextInput.isVisible, isTrue);
     expect(
-      find.text('Conta criada! Entre com seu e-mail e senha.'),
-      findsOneWidget,
+      tester
+          .widget<EditableText>(
+            find.descendant(
+              of: find.byKey(const ValueKey('password')),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
     );
     await tester.enterText(find.byKey(const ValueKey('password')), 'errada');
     await tester.ensureVisible(find.text('Entrar'));

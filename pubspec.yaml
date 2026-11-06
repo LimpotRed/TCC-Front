@@ -10,6 +10,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   image_picker: ^1.2.0
+  pdf: ^3.13.1
+  printing: ^5.15.1
   shared_preferences: ^2.5.3
   flutter:
     sdk: flutter
@@ -26,3 +28,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/image.png
+    - assets/fonts/NotoSans-Regular.ttf
+    - assets/fonts/NotoSans-Bold.ttf

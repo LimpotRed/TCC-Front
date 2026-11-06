@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+
+import 'app_theme.dart';
+
 import 'package:flutter/services.dart';
 
 import 'api_client.dart';
-
-const _surface = Color(0xFF242144);
-const _muted = Color(0xFFA39DBF);
-const _cyan = Color(0xFF36C9D8);
 
 String _display(dynamic value, [String fallback = 'Não informado']) {
   final text = value?.toString().trim();
@@ -399,7 +398,7 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
     return PopScope(
       canPop: !_saving,
       child: Scaffold(
-        backgroundColor: const Color(0xFF15142F),
+        backgroundColor: AppColors.of(context).background,
         appBar: AppBar(title: const Text('Registrar irrigação')),
         body: SafeArea(
           child: Center(
@@ -463,9 +462,9 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
                       icon: Icons.check_circle_outline,
                     ),
                   const SizedBox(height: 24),
-                  const Text(
+                  Text(
                     'Para salvar, o equipamento precisa ter vazão e potência válidas, e a fazenda precisa ter tarifas de água e energia cadastradas.',
-                    style: TextStyle(color: _muted),
+                    style: TextStyle(color: AppColors.of(context).muted),
                   ),
                   const SizedBox(height: 16),
                   const Text(
@@ -536,9 +535,9 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'O término será o momento em que o registro for salvo; a data registrada será a do início.',
-                      style: TextStyle(color: _muted),
+                      style: TextStyle(color: AppColors.of(context).muted),
                     ),
                   ] else ...[
                     OutlinedButton.icon(
@@ -580,7 +579,10 @@ class _IrrigationScreenState extends State<IrrigationScreen> {
                   ),
                   _Notice(_estimateText),
                   const SizedBox(height: 8),
-                  Text(_costMessage, style: const TextStyle(color: _muted)),
+                  Text(
+                    _costMessage,
+                    style: TextStyle(color: AppColors.of(context).muted),
+                  ),
                   if (_error != null) ...[
                     const SizedBox(height: 16),
                     Semantics(liveRegion: true, child: _Notice(_error!)),
@@ -619,7 +621,7 @@ class _Notice extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: _surface,
+      color: AppColors.of(context).surface,
       borderRadius: BorderRadius.circular(14),
     ),
     child: Column(
@@ -629,7 +631,7 @@ class _Notice extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (icon != null) ...[
-              Icon(icon, color: _cyan),
+              Icon(icon, color: AppColors.of(context).cyan),
               const SizedBox(width: 8),
             ],
             Expanded(child: Text(text)),

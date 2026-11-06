@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_theme.dart';
+
 import 'api_client.dart';
 import 'resource_schema.dart';
 
@@ -87,7 +89,7 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
     final farms = widget.farms.where((farm) => farm['id'] != null).toList();
     final selected = farms.where((farm) => farm['id'].toString() == _farmId);
     return Scaffold(
-      backgroundColor: const Color(0xFF15142F),
+      backgroundColor: AppColors.of(context).background,
       appBar: AppBar(
         title: const Text('Plantio em andamento'),
         actions: [
@@ -110,15 +112,15 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Acompanhe a safra atual e o histórico produtivo de cada setor.',
-                  style: TextStyle(color: Color(0xFFA39DBF)),
+                  style: TextStyle(color: AppColors.of(context).muted),
                 ),
                 if (!widget.canManagePlantings) ...[
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     'Seu perfil não permite cadastrar plantios ou registrar colheitas.',
-                    style: TextStyle(color: Color(0xFFA39DBF)),
+                    style: TextStyle(color: AppColors.of(context).muted),
                   ),
                 ],
                 const SizedBox(height: 20),
@@ -150,8 +152,8 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
                 else if (selected.isNotEmpty)
                   Text(
                     selected.first['nome']?.toString() ?? 'Fazenda',
-                    style: const TextStyle(
-                      color: Color(0xFF36C9D8),
+                    style: TextStyle(
+                      color: AppColors.of(context).cyan,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
@@ -188,7 +190,9 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
                         children: [
                           Text(
                             '${sectors.length} ${sectors.length == 1 ? 'setor' : 'setores'} nesta fazenda',
-                            style: const TextStyle(color: Color(0xFFA39DBF)),
+                            style: TextStyle(
+                              color: AppColors.of(context).muted,
+                            ),
                           ),
                           const SizedBox(height: 12),
                           for (final sector in sectors) ...[
@@ -222,10 +226,10 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
       (row) => row['statusPlantio'] == 'EM_ANDAMENTO',
     );
     return Card(
-      color: const Color(0xFF242144),
+      color: AppColors.of(context).surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: Color(0xFF393254)),
+        side: BorderSide(color: AppColors.of(context).border),
       ),
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -234,9 +238,9 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
           children: [
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.location_on_outlined,
-                  color: Color(0xFF36C9D8),
+                  color: AppColors.of(context).cyan,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -259,15 +263,15 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
                         ? 'Safra ativa'
                         : 'Planejado',
                     active.isEmpty
-                        ? const Color(0xFFA39DBF)
+                        ? AppColors.of(context).muted
                         : inProgress
-                        ? const Color(0xFF65D99A)
-                        : const Color(0xFF36C9D8),
+                        ? AppColors.of(context).green
+                        : AppColors.of(context).cyan,
                   ),
                 ),
               ],
             ),
-            const Divider(height: 30, color: Color(0xFF393254)),
+            Divider(height: 30, color: AppColors.of(context).border),
             const Text(
               'SAFRA ATUAL',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
@@ -276,15 +280,15 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF1B1938),
+                color: AppColors.of(context).inner,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: active.isEmpty
-                  ? const Column(
+                  ? Column(
                       children: [
                         Icon(
                           Icons.grass_outlined,
-                          color: Color(0xFFA39DBF),
+                          color: AppColors.of(context).muted,
                           size: 32,
                         ),
                         SizedBox(height: 8),
@@ -315,9 +319,9 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
               ),
             ] else if (widget.canManagePlantings) ...[
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Este setor já possui uma safra não concluída.',
-                style: TextStyle(color: Color(0xFFA39DBF)),
+                style: TextStyle(color: AppColors.of(context).muted),
               ),
             ],
             const SizedBox(height: 12),
@@ -358,7 +362,7 @@ class _FarmPlantingScreenState extends State<FarmPlantingScreen> {
           onPressed: () => _harvest(sector, planting),
           style: FilledButton.styleFrom(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: const Color(0xFF1B1938),
+            foregroundColor: Theme.of(context).colorScheme.onPrimary,
             minimumSize: const Size(0, 48),
           ),
           child: const Text('Registrar colheita'),
@@ -485,7 +489,7 @@ class _MessageCard extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
     child: Card(
-      color: const Color(0xFF242144),
+      color: AppColors.of(context).surface,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(children: [Text(message), ?action]),
@@ -536,7 +540,7 @@ class _DateSelector extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           alignment: Alignment.centerLeft,
-          side: const BorderSide(color: Color(0xFF57516C)),
+          side: BorderSide(color: AppColors.of(context).border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -551,9 +555,9 @@ class _DateSelector extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Color(0xFFA39DBF),
+                      color: AppColors.of(context).muted,
                     ),
                   ),
                   const SizedBox(height: 4),

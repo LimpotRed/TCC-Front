@@ -6,9 +6,6 @@ import 'auth_validation.dart';
 import 'brand.dart';
 import 'dashboard_screen.dart';
 
-// Escolhe quais campos aparecem: login ou cadastro.
-enum _AuthMode { login, register }
-
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.auth});
   final AuthService? auth;
@@ -19,108 +16,60 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   late final AuthService _auth = widget.auth ?? AuthService();
-  // A chave valida o formulário; os controllers guardam o texto dos campos.
   final _form = GlobalKey<FormState>();
-  final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  final _confirm = TextEditingController();
   final _passwordFocus = FocusNode();
-  final _confirmFocus = FocusNode();
   final _visibilityButtonFocus = FocusNode(
     skipTraversal: true,
     canRequestFocus: false,
   );
-
-  _AuthMode _mode = _AuthMode.login;
   bool _hidePassword = true;
-  bool _hideConfirmation = true;
   bool _busy = false;
   String? _error;
-  String? _notice;
-
-  bool get _isLogin => _mode == _AuthMode.login;
-  bool get _isRegister => _mode == _AuthMode.register;
 
   @override
   void dispose() {
-    // Libera os campos da memória ao fechar a tela.
-    for (final controller in [_name, _email, _password, _confirm]) {
-      controller.dispose();
-    }
+    _email.dispose();
+    _password.dispose();
     _passwordFocus.dispose();
-    _confirmFocus.dispose();
     _visibilityButtonFocus.dispose();
     super.dispose();
   }
 
-  // Troca a tela, mantendo o e-mail e limpando as senhas.
-  void _changeMode(_AuthMode mode) {
-    if (_busy) return;
-    FocusScope.of(context).unfocus();
-    final email = _email.text;
-    _form.currentState?.reset();
-    setState(() {
-      _email.text = email;
-      _mode = mode;
-      _error = null;
-      _notice = null;
-      _password.clear();
-      _confirm.clear();
-
-      _hidePassword = true;
-      _hideConfirmation = true;
-    });
-  }
-
-  // Valida os campos e bloqueia cliques repetidos enquanto aguarda a resposta.
   Future<void> _submit() async {
     if (_busy || !_form.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() {
       _busy = true;
       _error = null;
-      _notice = null;
     });
     try {
-      if (_isLogin) {
-        final name = await _auth.signIn(
-          email: _email.text,
-          password: _password.text,
-        );
-        if (!mounted) return;
-        TextInput.finishAutofillContext();
-        // Abre o painel e remove o login do caminho de volta.
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute<void>(
-            builder: (_) => DashboardScreen(
-              auth: _auth,
-              name: name,
-              email: _email.text.trim().toLowerCase(),
-              onLogout: (dashboardContext) {
-                _auth.signOut();
-                Navigator.of(dashboardContext).pushAndRemoveUntil(
-                  MaterialPageRoute<void>(
-                    builder: (_) => LoginScreen(auth: _auth),
-                  ),
-                  (_) => false,
-                );
-              },
-            ),
+      final name = await _auth.signIn(
+        email: _email.text,
+        password: _password.text,
+      );
+      if (!mounted) return;
+      TextInput.finishAutofillContext();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute<void>(
+          builder: (_) => DashboardScreen(
+            auth: _auth,
+            name: name,
+            email: _email.text.trim().toLowerCase(),
+            onLogout: (dashboardContext) {
+              _auth.signOut();
+              Navigator.of(dashboardContext).pushAndRemoveUntil(
+                MaterialPageRoute<void>(
+                  builder: (_) => LoginScreen(auth: _auth),
+                ),
+                (_) => false,
+              );
+            },
           ),
-          (_) => false,
-        );
-      } else {
-        await _auth.register(
-          name: _name.text,
-          email: _email.text,
-          password: _password.text,
-        );
-        if (!mounted) return;
-        setState(() => _busy = false);
-        _changeMode(_AuthMode.login);
-        setState(() => _notice = 'Conta criada! Entre com seu e-mail e senha.');
-      }
+        ),
+        (_) => false,
+      );
     } on ApiFailure catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
@@ -135,7 +84,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Mantém a mesma aparência em todos os campos.
   InputDecoration _decoration(String label, IconData icon) => InputDecoration(
     labelText: label,
     prefixIcon: Icon(icon),
@@ -143,65 +91,8 @@ class _LoginScreenState extends State<LoginScreen> {
     errorMaxLines: 3,
   );
 
-  // Reaproveita o campo de senha para a confirmação do cadastro.
-  Widget _passwordField({bool confirmation = false}) {
-    final hidden = confirmation ? _hideConfirmation : _hidePassword;
-    return TextFormField(
-      key: ValueKey(confirmation ? 'confirm' : 'password'),
-      controller: confirmation ? _confirm : _password,
-      focusNode: confirmation ? _confirmFocus : _passwordFocus,
-      obscureText: hidden,
-      autocorrect: false,
-      enableSuggestions: false,
-      autofillHints: confirmation
-          ? null
-          : [_isLogin ? AutofillHints.password : AutofillHints.newPassword],
-      textInputAction: !_isLogin && !confirmation
-          ? TextInputAction.next
-          : TextInputAction.done,
-      onFieldSubmitted: (_) {
-        if (_isLogin || confirmation) _submit();
-      },
-      decoration:
-          _decoration(
-            confirmation ? 'Confirmar senha' : 'Senha',
-            Icons.lock_outline,
-          ).copyWith(
-            helperText: !_isLogin && !confirmation
-                ? 'Use pelo menos 8 caracteres.'
-                : null,
-            suffixIcon: IconButton(
-              focusNode: _visibilityButtonFocus,
-              tooltip: hidden ? 'Mostrar senha' : 'Ocultar senha',
-              onPressed: () => setState(() {
-                if (confirmation) {
-                  _hideConfirmation = !hidden;
-                } else {
-                  _hidePassword = !hidden;
-                }
-              }),
-              icon: Icon(
-                hidden
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-              ),
-            ),
-          ),
-      validator: (value) {
-        if (confirmation) {
-          return value == _password.text ? null : 'As senhas não coincidem.';
-        }
-        return _isLogin
-            ? (value == null || value.isEmpty ? 'Informe sua senha.' : null)
-            : validateNewPassword(value);
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final title = _isLogin ? 'Bem-vindo de volta!' : 'Crie sua conta';
-    final action = _isLogin ? 'Entrar' : 'Criar conta';
     return Theme(
       data: ThemeData.light(useMaterial3: true)
           .copyWith(colorScheme: ColorScheme.fromSeed(seedColor: brandColor)),
@@ -232,48 +123,26 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Text(
-                                  title,
-                                  style: const TextStyle(
+                                const Text(
+                                  'Bem-vindo de volta!',
+                                  style: TextStyle(
                                     fontSize: 26,
                                     fontWeight: FontWeight.w700,
                                     color: brandColor,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Text(
-                                  _isLogin
-                                      ? 'Entre com seu e-mail e senha.'
-                                      : 'Preencha seus dados para começar.',
-                                ),
+                                const Text('Entre com seu e-mail e senha.'),
                                 const SizedBox(height: 24),
-                                if (_error != null || _notice != null) ...[
+                                if (_error != null) ...[
                                   Semantics(
                                     liveRegion: true,
                                     child: Text(
-                                      _error ?? _notice!,
+                                      _error!,
                                       style: TextStyle(
-                                        color: _error != null
-                                            ? Colors.red.shade800
-                                            : Colors.green.shade800,
+                                        color: Colors.red.shade800,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-                                if (_isRegister) ...[
-                                  TextFormField(
-                                    key: const ValueKey('name'),
-                                    controller: _name,
-                                    textCapitalization:
-                                        TextCapitalization.words,
-                                    textInputAction: TextInputAction.next,
-                                    autofillHints: const [AutofillHints.name],
-                                    decoration: _decoration(
-                                      'Nome',
-                                      Icons.person_outline,
-                                    ),
-                                    validator: validateName,
                                   ),
                                   const SizedBox(height: 16),
                                 ],
@@ -291,11 +160,42 @@ class _LoginScreenState extends State<LoginScreen> {
                                   validator: validateEmail,
                                 ),
                                 const SizedBox(height: 16),
-                                _passwordField(),
-                                if (!_isLogin) ...[
-                                  const SizedBox(height: 16),
-                                  _passwordField(confirmation: true),
-                                ],
+                                TextFormField(
+                                  key: const ValueKey('password'),
+                                  controller: _password,
+                                  focusNode: _passwordFocus,
+                                  obscureText: _hidePassword,
+                                  autocorrect: false,
+                                  enableSuggestions: false,
+                                  autofillHints: const [AutofillHints.password],
+                                  textInputAction: TextInputAction.done,
+                                  onFieldSubmitted: (_) => _submit(),
+                                  decoration:
+                                      _decoration(
+                                        'Senha',
+                                        Icons.lock_outline,
+                                      ).copyWith(
+                                        suffixIcon: IconButton(
+                                          focusNode: _visibilityButtonFocus,
+                                          tooltip: _hidePassword
+                                              ? 'Mostrar senha'
+                                              : 'Ocultar senha',
+                                          onPressed: () => setState(
+                                            () =>
+                                                _hidePassword = !_hidePassword,
+                                          ),
+                                          icon: Icon(
+                                            _hidePassword
+                                                ? Icons.visibility_outlined
+                                                : Icons.visibility_off_outlined,
+                                          ),
+                                        ),
+                                      ),
+                                  validator: (value) =>
+                                      value == null || value.isEmpty
+                                      ? 'Informe sua senha.'
+                                      : null,
+                                ),
                                 const SizedBox(height: 24),
                                 FilledButton(
                                   style: FilledButton.styleFrom(
@@ -312,33 +212,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                             semanticsLabel: 'Aguarde',
                                           ),
                                         )
-                                      : Text(action),
+                                      : const Text('Entrar'),
                                 ),
-                                if (_isLogin) ...[
-                                  const SizedBox(height: 16),
-                                  Wrap(
-                                    alignment: WrapAlignment.center,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      const Text('Não possui conta?'),
-                                      TextButton(
-                                        onPressed: () =>
-                                            _changeMode(_AuthMode.register),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: brandColor,
-                                        ),
-                                        child: const Text('Crie agora'),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                                if (!_isLogin)
-                                  TextButton(
-                                    onPressed: () =>
-                                        _changeMode(_AuthMode.login),
-                                    child: const Text('Voltar para o login'),
-                                  ),
                               ],
                             ),
                           ),

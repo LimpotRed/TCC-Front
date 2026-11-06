@@ -2,12 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'app_theme.dart';
+
 import 'api_client.dart';
 import 'open_meteo_service.dart';
-
-const _surface = Color(0xFF242144);
-const _muted = Color(0xFFA39DBF);
-const _cyan = Color(0xFF36C9D8);
 
 /// Consulta o clima pela referência meteorológica vinculada à fazenda.
 class FarmWeatherCard extends StatefulWidget {
@@ -169,16 +167,20 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _surface,
+        color: AppColors.of(context).surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF393254)),
+        border: Border.all(color: AppColors.of(context).border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.cloud_outlined, color: _cyan, size: 24),
+              Icon(
+                Icons.cloud_outlined,
+                color: AppColors.of(context).cyan,
+                size: 24,
+              ),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -188,13 +190,13 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
               ),
             ],
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(color: Color(0xFF393254)),
+            child: Divider(color: AppColors.of(context).border),
           ),
-          const Text(
+          Text(
             'Acompanhe as condições climáticas estimadas para a fazenda selecionada.',
-            style: TextStyle(color: _muted, height: 1.5),
+            style: TextStyle(color: AppColors.of(context).muted, height: 1.5),
           ),
           const SizedBox(height: 16),
           Row(
@@ -205,19 +207,22 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: _cyan.withValues(alpha: .12),
+                  color: AppColors.of(context).cyan.withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
+                child: Text(
                   'VIRTUAL',
-                  style: TextStyle(color: _cyan, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: AppColors.of(context).cyan,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const Spacer(),
               IconButton(
                 tooltip: 'Atualizar clima',
                 onPressed: _loading ? null : _loadFarms,
-                icon: const Icon(Icons.refresh, color: _cyan),
+                icon: Icon(Icons.refresh, color: AppColors.of(context).cyan),
               ),
             ],
           ),
@@ -261,28 +266,31 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   selected.location!,
-                  style: const TextStyle(color: _muted),
+                  style: TextStyle(color: AppColors.of(context).muted),
                 ),
               ),
             if (reference != null) ...[
               Text(
                 'Referência climática: ${reference.name}',
-                style: const TextStyle(color: _muted, fontSize: 12),
+                style: TextStyle(
+                  color: AppColors.of(context).muted,
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.location_on_outlined,
-                    color: _muted,
+                    color: AppColors.of(context).muted,
                     size: 18,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '${reference.latitude.toStringAsFixed(6)}, ${reference.longitude.toStringAsFixed(6)}',
-                      style: const TextStyle(color: _muted),
+                      style: TextStyle(color: AppColors.of(context).muted),
                     ),
                   ),
                 ],
@@ -304,7 +312,10 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
               liveRegion: true,
               child: Column(
                 children: [
-                  const Icon(Icons.cloud_off_outlined, color: _muted),
+                  Icon(
+                    Icons.cloud_off_outlined,
+                    color: AppColors.of(context).muted,
+                  ),
                   const SizedBox(height: 10),
                   Text(_error!, textAlign: TextAlign.center),
                   TextButton(
@@ -319,7 +330,7 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
           else if (selected == null)
             Semantics(
               liveRegion: true,
-              child: const Column(
+              child: Column(
                 children: [
                   Text(
                     'Nenhuma fazenda disponível.',
@@ -329,7 +340,7 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
                   Text(
                     'As fazendas são cadastradas no aplicativo web. Peça à equipe responsável para vincular sua fazenda à conta.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: _muted),
+                    style: TextStyle(color: AppColors.of(context).muted),
                   ),
                 ],
               ),
@@ -337,7 +348,7 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
           else if (_referenceLoaded && reference == null)
             Semantics(
               liveRegion: true,
-              child: const Column(
+              child: Column(
                 children: [
                   Text(
                     'A fazenda selecionada não possui estação vinculada com coordenadas válidas.',
@@ -347,7 +358,7 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
                   Text(
                     'A equipe responsável deve configurar o vínculo e as coordenadas no aplicativo web. Depois, atualize o painel.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: _muted),
+                    style: TextStyle(color: AppColors.of(context).muted),
                   ),
                 ],
               ),
@@ -355,9 +366,9 @@ class _FarmWeatherCardState extends State<FarmWeatherCard> {
           else if (weather != null)
             _CurrentWeather(weather: weather, clock: widget.clock),
           const SizedBox(height: 16),
-          const SelectableText(
+          SelectableText(
             'Fonte: Open-Meteo • open-meteo.com • CC BY 4.0',
-            style: TextStyle(color: _muted, fontSize: 11),
+            style: TextStyle(color: AppColors.of(context).muted, fontSize: 11),
           ),
         ],
       ),
@@ -509,12 +520,14 @@ class _CurrentWeatherState extends State<_CurrentWeather> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: _cyan.withValues(alpha: .08),
+                  color: AppColors.of(context).cyan.withValues(alpha: .08),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   condition.$1,
-                  color: const Color(0xFFFFCE72),
+                  color: AppColors.of(context).light
+                      ? const Color(0xFF8D5A00)
+                      : const Color(0xFFFFCE72),
                   size: 44,
                 ),
               ),
@@ -536,9 +549,12 @@ class _CurrentWeatherState extends State<_CurrentWeather> {
                       ),
                     ),
                     if (weather.temperature != null)
-                      const Text(
+                      Text(
                         '°C',
-                        style: TextStyle(color: _muted, fontSize: 24),
+                        style: TextStyle(
+                          color: AppColors.of(context).muted,
+                          fontSize: 24,
+                        ),
                       ),
                   ],
                 ),
@@ -547,7 +563,10 @@ class _CurrentWeatherState extends State<_CurrentWeather> {
           ],
         ),
         const SizedBox(height: 12),
-        Text(condition.$2, style: const TextStyle(color: _muted)),
+        Text(
+          condition.$2,
+          style: TextStyle(color: AppColors.of(context).muted),
+        ),
       ],
     );
     final metrics = Column(
@@ -576,9 +595,9 @@ class _CurrentWeatherState extends State<_CurrentWeather> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF1B1938),
+          color: AppColors.of(context).inner,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFF393254)),
+          border: Border.all(color: AppColors.of(context).border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -588,14 +607,20 @@ class _CurrentWeatherState extends State<_CurrentWeather> {
               spacing: 16,
               runSpacing: 8,
               children: [
-                const Text(
+                Text(
                   'HORA LOCAL DA FAZENDA',
-                  style: TextStyle(color: _muted, fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.of(context).muted,
+                    fontSize: 12,
+                  ),
                 ),
                 Text(
                   localTime,
                   key: const Key('farm-local-time'),
-                  style: const TextStyle(color: _muted, fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.of(context).muted,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -603,12 +628,15 @@ class _CurrentWeatherState extends State<_CurrentWeather> {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 'Dados meteorológicos de $dataTime',
-                style: const TextStyle(color: _muted, fontSize: 11),
+                style: TextStyle(
+                  color: AppColors.of(context).muted,
+                  fontSize: 11,
+                ),
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
-              child: Divider(color: Color(0xFF393254)),
+              child: Divider(color: AppColors.of(context).border),
             ),
             LayoutBuilder(
               builder: (context, constraints) => constraints.maxWidth >= 480
@@ -629,9 +657,13 @@ class _CurrentWeatherState extends State<_CurrentWeather> {
                     ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Estimativas meteorológicas. A chance de chuva se refere ao intervalo horário indicado.',
-              style: TextStyle(color: _muted, fontSize: 11, height: 1.5),
+              style: TextStyle(
+                color: AppColors.of(context).muted,
+                fontSize: 11,
+                height: 1.5,
+              ),
             ),
           ],
         ),
@@ -668,14 +700,16 @@ class _WeatherMetric extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      ExcludeSemantics(child: Icon(icon, color: _cyan, size: 22)),
+      ExcludeSemantics(
+        child: Icon(icon, color: AppColors.of(context).cyan, size: 22),
+      ),
       const SizedBox(width: 10),
       Expanded(
         child: Wrap(
           spacing: 6,
           runSpacing: 4,
           children: [
-            Text(label, style: const TextStyle(color: _muted)),
+            Text(label, style: TextStyle(color: AppColors.of(context).muted)),
             Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
           ],
         ),

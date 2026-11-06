@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'api_client.dart';
-import 'auth_validation.dart';
 export 'api_client.dart' show ApiFailure;
 
 class AuthService {
@@ -11,28 +10,6 @@ class AuthService {
   bool get canManage => ['ADMIN', 'TECNICO'].contains(profile?['role']);
   bool get canManagePlantings =>
       ['ADMIN', 'TECNICO', 'PRODUTOR'].contains(profile?['role']);
-  Future<void> register({
-    required String name,
-    required String email,
-    required String password,
-  }) async {
-    final error =
-        validateName(name) ??
-        validateEmail(email) ??
-        validateNewPassword(password);
-    if (error != null) throw ApiFailure(error);
-    await api.request(
-      'POST',
-      'auth/register',
-      body: {
-        'nome': name.trim(),
-        'email': email.trim().toLowerCase(),
-        'senha': password,
-        'role': 'PRODUTOR',
-      },
-    );
-  }
-
   Future<String> signIn({
     required String email,
     required String password,

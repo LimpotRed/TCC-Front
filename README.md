@@ -40,7 +40,7 @@ O frontend usa `http://localhost:8081` como API por padrão. Para apontar para u
 
 ## Funcionalidades da interface
 
-- Cadastro público de conta e login; a edição do perfil depende de `PUT /auth/me`, ausente no backend atual.
+- Login sem cadastro de contas no aplicativo; a edição do perfil depende de `PUT /auth/me`, ausente no backend atual.
 - Visão geral com seleção de fazenda, atualização a cada 60 segundos, setores, plantios e sensores. O controle de irrigação fica na Gestão.
 - Cartão de clima em **Gestão > Clima > Leituras climáticas** usa a estação vinculada; a tela de safras consulta setores e plantios da fazenda.
 - Consulta de fazendas, setores e estações cadastrados no aplicativo web da outra equipe, sem comandos de escrita para esses recursos.

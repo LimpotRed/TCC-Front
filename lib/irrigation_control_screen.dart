@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'api_client.dart';
-import 'irrigation_screen.dart';
+import 'app_theme.dart';
 
-const _background = Color(0xFF15142F);
-const _surface = Color(0xFF242144);
-const _muted = Color(0xFFA39DBF);
-const _cyan = Color(0xFF36C9D8);
+import 'api_client.dart';
+import 'irrigation_history_screen.dart';
+import 'irrigation_screen.dart';
 
 /// Acesso ao registro de irrigação para a fazenda selecionada.
 class IrrigationControlScreen extends StatefulWidget {
@@ -147,10 +145,25 @@ class _IrrigationControlScreenState extends State<IrrigationControlScreen> {
     }
   }
 
+  void _openHistory() {
+    final farmId = _farmId;
+    final farms = _farms.where((farm) => farm['id']?.toString() == farmId);
+    if (farmId == null || farms.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => IrrigationHistoryScreen(
+          api: widget.api,
+          farmId: farmId,
+          farmName: farms.first['nome']?.toString() ?? 'Fazenda',
+        ),
+      ),
+    );
+  }
+
   Widget _message(String message, {VoidCallback? retry}) => Container(
     padding: const EdgeInsets.all(20),
     decoration: BoxDecoration(
-      color: _surface,
+      color: AppColors.of(context).surface,
       borderRadius: BorderRadius.circular(20),
     ),
     child: Column(
@@ -167,7 +180,7 @@ class _IrrigationControlScreenState extends State<IrrigationControlScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: _background,
+    backgroundColor: AppColors.of(context).background,
     appBar: AppBar(title: const Text('Controle de irrigação')),
     body: Center(
       child: ConstrainedBox(
@@ -211,16 +224,19 @@ class _IrrigationControlScreenState extends State<IrrigationControlScreen> {
               Container(
                 padding: const EdgeInsets.all(22),
                 decoration: BoxDecoration(
-                  color: _surface,
+                  color: AppColors.of(context).surface,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFF393254)),
+                  border: Border.all(color: AppColors.of(context).border),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.water_drop_outlined, color: _cyan),
+                        Icon(
+                          Icons.water_drop_outlined,
+                          color: AppColors.of(context).cyan,
+                        ),
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -234,9 +250,9 @@ class _IrrigationControlScreenState extends State<IrrigationControlScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Registre o tempo de funcionamento e acompanhe o consumo de água e energia.',
-                      style: TextStyle(color: _muted),
+                      style: TextStyle(color: AppColors.of(context).muted),
                     ),
                     const SizedBox(height: 12),
                     if (_loadingSectors)
@@ -268,6 +284,15 @@ class _IrrigationControlScreenState extends State<IrrigationControlScreen> {
                       label: const Text('Registrar irrigação'),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _openHistory,
+                  icon: const Icon(Icons.history),
+                  label: const Text('Histórico de irrigação'),
                 ),
               ),
             ],

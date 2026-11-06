@@ -179,7 +179,10 @@ void main() {
       button.style!.backgroundColor!.resolve({}),
       Theme.of(tester.element(harvestButton)).colorScheme.primary,
     );
-    expect(button.style!.foregroundColor!.resolve({}), const Color(0xFF1B1938));
+    expect(
+      button.style!.foregroundColor!.resolve({}),
+      Theme.of(tester.element(harvestButton)).colorScheme.onPrimary,
+    );
     await tester.tap(find.text('Registrar colheita'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('OK'));

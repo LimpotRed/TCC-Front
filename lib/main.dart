@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'brand.dart';
+import 'app_theme.dart';
 import 'login_screen.dart';
 export 'login_screen.dart' show LoginScreen;
 
@@ -12,26 +13,54 @@ void main() {
   runApp(const GhydroApp());
 }
 
-class GhydroApp extends StatelessWidget {
+class GhydroApp extends StatefulWidget {
   const GhydroApp({super.key});
 
   @override
+  State<GhydroApp> createState() => _GhydroAppState();
+}
+
+class _GhydroAppState extends State<GhydroApp> {
+  final _themeMode = ValueNotifier(ThemeMode.dark);
+
+  @override
+  void dispose() {
+    _themeMode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Ghydro',
-      locale: const Locale('pt', 'BR'),
-      supportedLocales: const [Locale('pt', 'BR')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true).copyWith(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF36C9D8),
-          brightness: Brightness.dark,
+    return AppThemeScope(
+      controller: _themeMode,
+      child: ValueListenableBuilder<ThemeMode>(
+        valueListenable: _themeMode,
+        builder: (context, mode, _) => MaterialApp(
+          title: 'Ghydro',
+          locale: const Locale('pt', 'BR'),
+          supportedLocales: const [Locale('pt', 'BR')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          debugShowCheckedModeBanner: false,
+          darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF36C9D8),
+              brightness: Brightness.dark,
+            ),
+            scaffoldBackgroundColor: const Color(0xFF15142F),
+            appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF15142F)),
+          ),
+          theme: ThemeData.light(useMaterial3: true).copyWith(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF006E78),
+              brightness: Brightness.light,
+            ),
+            scaffoldBackgroundColor: const Color(0xFFF3F7F8),
+            appBarTheme: const AppBarTheme(backgroundColor: Color(0xFFF3F7F8)),
+          ),
+          themeMode: mode,
+          home: const SplashScreen(),
         ),
-        scaffoldBackgroundColor: const Color(0xFF15142F),
-        appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF15142F)),
       ),
-      home: const SplashScreen(),
     );
   }
 }

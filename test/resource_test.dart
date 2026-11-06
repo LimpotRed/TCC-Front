@@ -107,6 +107,46 @@ http.Response response(Object value, [int status = 200]) => http.Response(
 );
 
 void main() {
+  testWidgets(
+    'Proprietários exibe a resposta da API e informa a ausência de filtro',
+    (tester) async {
+      final requests = <http.Request>[];
+      final api = ApiClient(
+        client: MockClient((request) async {
+          requests.add(request);
+          return http.Response(
+            jsonEncode([
+              {'id': 1, 'nome': 'Pessoa Um'},
+              {'id': 2, 'nome': 'Pessoa Dois'},
+              {'id': 3, 'nome': 'Pessoa Três'},
+            ]),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      )..token = 'token-de-teste';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ResourceScreen(
+            api: api,
+            spec: resource('proprietario'),
+            canManage: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(requests.single.url.path, '/proprietario');
+      expect(requests.single.headers['Authorization'], 'Bearer token-de-teste');
+      expect(find.text('Pessoa Um'), findsOneWidget);
+      expect(find.text('Pessoa Dois'), findsOneWidget);
+      expect(find.text('Pessoa Três'), findsOneWidget);
+      expect(
+        find.textContaining('não filtra os proprietários pelo usuário'),
+        findsOneWidget,
+      );
+    },
+  );
+
   for (final entry in examples.entries) {
     final readOnly = [
       'propriedade',

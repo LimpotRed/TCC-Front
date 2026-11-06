@@ -27,7 +27,7 @@ Não é necessário ler todos os arquivos para cada mudança. Use esta rota:
 | Tipo de tarefa | Arquivos principais |
 | --- | --- |
 | Inicialização, splash, tema global | `lib/main.dart`, `lib/brand.dart` |
-| Login, cadastro, validação e sessão | `lib/login_screen.dart`, `lib/auth_service.dart`, `lib/auth_validation.dart`, `lib/api_client.dart` |
+| Login, validação e sessão | `lib/login_screen.dart`, `lib/auth_service.dart`, `lib/auth_validation.dart`, `lib/api_client.dart` |
 | Painel, irrigação, perfil, safras e relatórios | `lib/dashboard_screen.dart`, `lib/irrigation_screen.dart`, `lib/farm_planting_screen.dart`, `lib/farm_weather_card.dart` |
 | Clima em Gestão > Clima > Leituras climáticas e Open-Meteo | `lib/dashboard_screen.dart`, `lib/resource_screen.dart`, `lib/farm_weather_card.dart`, `lib/open_meteo_service.dart` |
 | Campos, enums, relacionamentos ou novo módulo | `lib/resource_schema.dart`, `lib/resource_screen.dart` |
@@ -38,7 +38,7 @@ Não é necessário ler todos os arquivos para cada mudança. Use esta rota:
 ## Tecnologia e execução
 
 - Flutter com Dart SDK `^3.13.2` e Material 3.
-- Dependências de produção: Flutter, `http`, `image_picker`, `shared_preferences`, `cupertino_icons` e `flutter_localizations`.
+- Dependências de produção: Flutter, `http`, `image_picker`, `shared_preferences`, `pdf`, `printing`, `cupertino_icons` e `flutter_localizations`.
 - Locale único: `pt_BR`.
 - Frontend web local: `http://localhost:4200` por padrão; `-WebPort` permite alterar a porta.
 - API local padrão: `http://localhost:8081`.
@@ -68,7 +68,7 @@ Na cópia atual do backend, `application.properties` contém credenciais e segre
 
 ### Compatibilidade do backend copiado
 
-A cópia atual em `Tcc-Back/GHydro-BackEnd` não implementa `GET /auth/me` ou `PUT /auth/me`. O login usa `GET /dominios/moedas` autenticado para confirmar que o token foi aceito e lê nome, e-mail e perfil das claims do JWT apenas para exibição e controles da interface. O servidor decide as permissões; o perfil da claim pode ficar desatualizado. CPF não está disponível nesse fluxo e a edição de perfil não conclui nessa API. O cadastro público do frontend envia `PRODUTOR`, mas o backend atual aceita o perfil enviado e não grava o nome informado como nome de conta.
+A cópia atual em `Tcc-Back/GHydro-BackEnd` não implementa `GET /auth/me` ou `PUT /auth/me`. O login usa `GET /dominios/moedas` autenticado para confirmar que o token foi aceito e lê nome, e-mail e perfil das claims do JWT apenas para exibição e controles da interface. O servidor decide as permissões; o perfil da claim pode ficar desatualizado. CPF não está disponível nesse fluxo e a edição de perfil não conclui nessa API. O frontend não oferece cadastro de contas. Controlar o acesso à rota de cadastro da API é responsabilidade do backend.
 
 O backend atual expoe `GET /estacaoMetereologica/propriedade/{id}`, autenticada, que retorna uma estacao como entidade. O cartao usa essa rota e so le nome e coordenadas; nunca mostra `apiKey`. A API nao oferece `GET /propriedade/{id}/estacoes`.
 
@@ -79,13 +79,16 @@ O backend tem `ADMIN`, `TECNICO` e `PRODUTOR`. `FarmPlantingScreen` usa `GET /se
 | Arquivo | Responsabilidade |
 | --- | --- |
 | `lib/main.dart` | entrada do app, tema escuro global e splash |
+| `lib/app_theme.dart` | cores e controle dos temas claro e escuro |
 | `lib/brand.dart` | cores da marca e widget compartilhado da logo |
-| `lib/login_screen.dart` | interface de login e cadastro |
+| `lib/login_screen.dart` | interface de login |
 | `lib/auth_validation.dart` | validação pura de nome, e-mail e nova senha |
-| `lib/auth_service.dart` | cadastro, login, perfil, token e logout |
+| `lib/auth_service.dart` | login, perfil, token e logout |
 | `lib/api_client.dart` | HTTP, JSON, Bearer token, timeout e tradução de erros |
 | `lib/dashboard_screen.dart` | início, gestão, perfil, relatórios e navegação inferior |
 | `lib/irrigation_control_screen.dart` | módulo de controle de irrigação, escolha da fazenda e acesso ao registro |
+| `lib/irrigation_history_screen.dart` | histórico de irrigação da fazenda selecionada |
+| `lib/irrigation_report_screen.dart` e `lib/irrigation_report_pdf.dart` | filtros e geração local de PDF de irrigação |
 | `lib/irrigation_screen.dart` | seleção de setor, identificação de equipamento ativo e registro do intervalo de irrigação |
 | `lib/farm_weather_card.dart` | `FarmWeatherCard`, seleção de fazenda, consulta da referência vinculada e estados de carregamento/erro/vazio |
 | `lib/farm_planting_screen.dart` | setores e plantios da fazenda, registro de plantio, colheita e histórico produtivo |
@@ -119,16 +122,10 @@ O projeto não usa gerenciador de estado externo. O estado está nos `StatefulWi
 - Falha de validação ou token com claims inválidas invalida a sessão recém-criada. O perfil informado na claim não substitui a autorização do servidor.
 - Login bem-sucedido abre `DashboardScreen` e remove o login da pilha de navegação.
 
-### Cadastro
+### Cadastro de contas
 
-- Campos: nome, e-mail, senha e confirmação de senha.
-- Nome precisa ter ao menos 2 caracteres após `trim()`.
-- E-mail precisa ter formato válido.
-- Nova senha precisa ter ao menos 8 caracteres e no máximo 72 bytes em UTF-8.
-- Confirmação precisa ser idêntica à senha.
-- O cadastro envia `POST /auth/register` com `{nome, email, senha, role: "PRODUTOR"}`.
-- Cadastro concluído retorna para o modo login, mantém o e-mail, limpa senhas e exibe aviso de sucesso.
-- O formulário envia sempre `PRODUTOR` e não oferece escolha de perfil. O backend atual aceita outros perfis se enviados diretamente e não persiste o nome recebido; isso exige correção pelo responsável pelo backend.
+- A tela de login não oferece criação de contas e o frontend não envia `POST /auth/register`.
+- Essa restrição da interface não impede chamadas diretas à API; controlar a rota é responsabilidade do backend.
 
 ### Sessão e logout
 
@@ -150,7 +147,7 @@ O projeto não usa gerenciador de estado externo. O estado está nos `StatefulWi
 
 Regras obrigatórias:
 
-- Após o login, a tela de safras oferece criação de plantio e registro de colheita em um setor existente quando a API correspondente estiver disponível. A Gestão oferece registro de irrigação. Os editores genéricos não oferecem criação. O cadastro público de conta permanece disponível.
+- Após o login, a tela de safras oferece criação de plantio e registro de colheita em um setor existente quando a API correspondente estiver disponível. A Gestão oferece registro de irrigação. Os editores genéricos não oferecem criação. O aplicativo não oferece cadastro de contas.
 - A interface oculta editar e excluir quando `canManage` é falso.
 - Recursos com `readOnly: true` não oferecem editar ou excluir para nenhum perfil. `propriedade`, `setor` e `estacaoMetereologica` usam essa regra porque o cadastro pertence ao aplicativo web da outra equipe.
 - Recursos com `staffOnly: true` não aparecem para produtor.
@@ -174,7 +171,9 @@ O callback de sessão expirada é instalado em `initState()` e removido em `disp
 
 ### Início
 
-- Anel de atividade: proporção de sensores com `status == ATIVO` sobre o total.
+- Um único controle alterna entre modo claro e escuro, com ícone de lua no escuro e de sol no claro. O modo escuro é o padrão; a escolha permanece em memória enquanto o aplicativo estiver aberto e volta ao padrão ao recarregar.
+- O seletor de fazenda tem cantos arredondados e contorno nas cores do anel de sensores.
+- Anel de atividade: proporção de sensores com `status == ATIVO` sobre o total de sensores vinculados aos setores da fazenda selecionada. A parte colorida representa essa proporção; sem sensores ativos, o anel permanece na cor de fundo.
 - A Home não apresenta a lista, os cartões ou a eficiência de dispositivos de irrigação.
 - Cartões de resumo mostram propriedades, setores, plantios `EM_ANDAMENTO` e sensores ativos da fazenda selecionada. Contagem de setores e plantios exibe `--` durante carga ou falha da consulta de setores.
 - Em tela móvel com largura menor que 600 px, os quatro cartões de resumo são quadrados e aparecem em 2 colunas.
@@ -186,6 +185,7 @@ O callback de sessão expirada é instalado em `initState()` e removido em `disp
 - Em **Gestão > Monitoramento > Controle de irrigação**, o módulo oferece seleção de fazenda e o cartão **Registrar irrigação**, sem listagem genérica de dispositivos. A seleção inicial acompanha a fazenda do painel. O módulo consulta as fazendas e os setores da selecionada, apresenta carregamento, erro e nova tentativa, e ignora respostas antigas ao trocar de fazenda. Ao selecionar um setor no formulário, `GET /dispositivoIrrigacao/setor/{id}` fornece seus dispositivos e identifica o único com `ativo == true`. Nenhum dispositivo ativo, ou mais de um ativo, impede o registro e mostra uma mensagem.
 - O produtor informa duração em horas/minutos, considerada encerrada no momento do registro, ou escolhe início e fim. O intervalo deve ser válido e não pode estar no futuro; não é exigido plantio ativo pela API nova.
 - O formulário envia `POST /registroIrrigacao` com `{setorId, dataIrrigacao, duracaoMinutos}`, usando o início do intervalo como `dataIrrigacao`. O servidor identifica o dispositivo ativo, valida acesso ao setor e exige vazão e potência positivas e tarifas válidas de água e energia. Ele calcula e salva estimativas, tarifas e custos com o registro.
+- O botão **Histórico de irrigação**, abaixo do cartão de controle, abre uma lista somente de consulta para a fazenda selecionada, obtida por `GET /registroIrrigacao/propriedade/{id}`. Mostra os registros do mais recente ao mais antigo, com início, duração, setor, dispositivo e estimativas de consumo e custo recebidas do servidor; dados ausentes são informados como tais, sem presumir moeda. Possui estados de carregamento, vazio e erro com nova tentativa e atualização manual. Não inclui registros antigos de `/execucaoManejo`.
 - Vazão e potência não têm unidades confirmadas explicitamente no modelo. A caixa inicia desmarcada; a prévia em m³/h e kW só aparece após confirmação pelo responsável. Essa opção não altera o cálculo do servidor, que ocorre ao salvar mesmo sem confirmação. Água, energia e custo são estimativas, não medições. A prévia pode diferir por arredondamento; os relatórios usam os valores devolvidos pela API. Os setores recarregam após salvar e o painel recarrega ao sair do módulo.
 
 ### Safras e setores
@@ -234,7 +234,8 @@ O callback de sessão expirada é instalado em `initState()` e removido em `disp
 ### Relatórios
 
 - Usa `GET /registroIrrigacao/propriedade/{id}` para a fazenda selecionada, com estados de carga e erro independentes e descarte de respostas antigas. O servidor valida o acesso à propriedade.
-- Os gráficos mostram duração e estimativas de água e energia registradas pelo servidor, agregadas por mês nos últimos 6 meses. Valores ausentes permanecem não informados. O resumo cobre todo o período. Registros antigos em `/execucaoManejo` não são incorporados automaticamente e continuam acessíveis no módulo de manejo.
+- Quatro gráficos aparecem em duas colunas: duração, volume de água, energia e gasto médio por irrigação (água e energia em séries separadas), agregados por mês nos últimos 6 meses. Os custos por registro são calculados pelo backend e enviados em `custoAgua` e `custoEnergia`; o frontend calcula para cada série a média dos valores válidos daquele mês, sem contar valores ausentes. Como a moeda não acompanha os registros, a média pressupõe que usem a mesma moeda e não recebe símbolo monetário. Valores ausentes permanecem não informados. O resumo cobre todo o período. Registros antigos em `/execucaoManejo` não são incorporados automaticamente e continuam acessíveis no módulo de manejo.
+- **Gerar relatório em PDF** permite escolher datas inicial e final inclusivas e tipo completo, duração, água, energia ou gastos. Ao gerar, consulta novamente os registros da fazenda selecionada e filtra localmente pela data de início; datas inválidas ou ausentes ficam fora do período. O PDF local contém resumo, evolução e gráficos mensais e histórico detalhado para o tipo escolhido; valores ausentes não contam nas somas ou médias. A moeda não é presumida. Na web inicia o download; em dispositivos móveis oferece o compartilhamento do sistema. O usuário controla onde salvar e pode cancelar. O documento não inclui o histórico anterior de `/execucaoManejo`.
 - Não calcular ou inventar economia financeira sem referência histórica fornecida pelo backend.
 - Links abrem execuções de manejo e configurações de custo.
 
@@ -245,6 +246,7 @@ O callback de sessão expirada é instalado em `initState()` e removido em `disp
 ### Listagem
 
 - Faz `GET /<path>` e mostra a resposta em ordem reversa.
+- Em Proprietários, informa que a API atual retorna todos os registros sem filtrar pelo usuário. Esse aviso não substitui o controle de acesso no backend.
 - Ignora respostas antigas usando um contador de geração quando há carregamentos concorrentes.
 - Busca local compara o texto digitado com valores exibíveis da linha, excluindo `apiKey`, sem diferenciar maiúsculas.
 - Se houver `status` ou `statusPlantio`, cria filtros com `ChoiceChip`.
@@ -348,7 +350,7 @@ O Open-Meteo usa `Accept: application/json`, decodificação UTF-8 e timeout de 
 
 ## Design, responsividade e acessibilidade
 
-- Tema principal escuro: fundo `#15142F`, superfícies `#242144`, texto secundário `#A39DBF`, destaque ciano `#36C9D8` e sucesso `#65D99A`.
+- O app oferece tema escuro e tema claro, com alternância no Início. O escuro usa fundo `#15142F` e superfícies `#242144`; o claro usa fundo `#F3F7F8`, superfícies brancas e cores de texto e destaque adequadas ao contraste.
 - Splash e login usam fundo `Color.fromARGB(255, 37, 69, 77)`; formulário de autenticação usa tema claro e destaque `#30C5C9`.
 - Larguras máximas: autenticação 440 px, editor 720 px, recursos 1100 px, painel 1180 px.
 - Todas as telas precisam funcionar a partir de 320 px sem overflow horizontal.
@@ -410,7 +412,7 @@ Testes atuais:
 | Arquivo | Cobertura |
 | --- | --- |
 | `test/splash_test.dart` | atraso de 2 segundos, substituição de rota e cancelamento do timer |
-| `test/auth_test.dart` | payloads de cadastro/login, JWT, perfil, erros, validação e navegação |
+| `test/auth_test.dart` | login, ausência de cadastro, JWT, perfil, erros, validação e navegação |
 | `test/dashboard_test.dart` | painel em 320 e 1200 px, dados reais simulados, módulos, relatórios, perfil e logout; clima acessível por Gestão > Clima > Leituras climáticas, sem cartão no Início, com seleção por fazenda |
 | `test/resource_test.dart` | ausência de criação na interface, contratos de edição, relações, tipos, erro preservado, leitura de produtor e exclusão; casos existentes adequados à consulta de fazendas/estações para todos os perfis |
 | `test/open_meteo_service_test.dart` | contrato Open-Meteo, unidades, hora local, probabilidade correspondente, dados ausentes, coordenadas, erros e isolamento do cliente |

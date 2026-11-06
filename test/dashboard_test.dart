@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +13,105 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  for (final active in [0, 1, 2]) {
+    testWidgets('Anel mostra proporção de $active de 2 sensores ativos', (
+      tester,
+    ) async {
+      final auth = AuthService(
+        api: ApiClient(
+          client: MockClient((request) async {
+            final body = switch (request.url.path) {
+              '/propriedade' => [
+                {'id': 1, 'nome': 'Fazenda'},
+              ],
+              '/setor/propriedade/1' => [
+                {'id': 10, 'nome': 'Setor', 'plantios': []},
+              ],
+              '/sensor' => [
+                for (var i = 0; i < 2; i++)
+                  {
+                    'status': i < active ? 'ATIVO' : 'INATIVO',
+                    'setor': {'id': 10},
+                  },
+                {
+                  'status': 'ATIVO',
+                  'setor': {'id': 99},
+                },
+              ],
+              _ => [],
+            };
+            return http.Response(
+              jsonEncode(body),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }),
+        )..token = 'sessão-teste',
+      )..profile = {'nome': 'Lucas', 'role': 'PRODUTOR'};
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: DashboardScreen(
+            auth: auth,
+            name: 'Lucas',
+            email: 'lucas@example.com',
+            onLogout: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final painter = tester
+          .widget<CustomPaint>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is CustomPaint &&
+                  widget.painter?.runtimeType.toString() == '_ActivityRing',
+            ),
+          )
+          .painter!;
+      expect(find.text('de 2 cadastrados'), findsOneWidget);
+      void paintRing(Canvas canvas) =>
+          painter.paint(canvas, const Size(240, 240));
+      expect(paintRing, paintsExactlyCountTimes(#drawArc, active == 0 ? 1 : 2));
+      if (active > 0) {
+        expect(
+          paintRing,
+          paints
+            ..arc(color: const Color(0xFF393254))
+            ..arc(
+              startAngle: -math.pi / 2,
+              sweepAngle: math.pi * active,
+              color: Colors.white,
+            ),
+        );
+      }
+      final pixel = await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        painter.paint(Canvas(recorder), const Size(240, 240));
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(240, 240);
+        final bytes = (await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!;
+        final offset = (29 * 240 + 122) * 4;
+        final rgb = [
+          bytes.getUint8(offset),
+          bytes.getUint8(offset + 1),
+          bytes.getUint8(offset + 2),
+        ];
+        image.dispose();
+        picture.dispose();
+        return rgb;
+      });
+      if (active == 0) {
+        expect(pixel, [0x39, 0x32, 0x54]);
+      } else {
+        expect(pixel, isNot([0x39, 0x32, 0x54]));
+        expect(pixel![1], greaterThan(pixel[0]));
+      }
+    });
+  }
+
   testWidgets('Fazenda escolhida permanece ao trocar aba e atualizar painel', (
     tester,
   ) async {

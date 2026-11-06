@@ -6,19 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'auth_service.dart';
+import 'app_theme.dart';
 import 'farm_planting_screen.dart';
 import 'open_meteo_service.dart';
 import 'resource_schema.dart';
 import 'resource_screen.dart';
 import 'farm_weather_card.dart';
 import 'irrigation_control_screen.dart';
+import 'irrigation_report_screen.dart';
 import 'profile_photo_service.dart';
-
-const _background = Color(0xFF15142F);
-const _surface = Color(0xFF242144);
-const _muted = Color(0xFFA39DBF);
-const _cyan = Color(0xFF36C9D8);
-const _green = Color(0xFF65D99A);
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
@@ -349,13 +345,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final profile = widget.auth.profile;
     final name = profile?['nome'] as String? ?? widget.name;
     return Scaffold(
-      backgroundColor: _background,
+      backgroundColor: AppColors.of(context).background,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [_background, Color(0xFF282347)],
+            colors: [
+              AppColors.of(context).background,
+              AppColors.of(context).headerEnd,
+            ],
           ),
         ),
         child: SafeArea(
@@ -373,7 +372,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onTap: _chooseProfilePhoto,
                           customBorder: const CircleBorder(),
                           child: CircleAvatar(
-                            backgroundColor: _surface,
+                            backgroundColor: AppColors.of(context).surface,
                             backgroundImage: _profilePhoto == null
                                 ? null
                                 : MemoryImage(_profilePhoto!),
@@ -383,7 +382,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     name.isEmpty
                                         ? 'G'
                                         : name.characters.first.toUpperCase(),
-                                    style: const TextStyle(color: _cyan),
+                                    style: TextStyle(
+                                      color: AppColors.of(context).cyan,
+                                    ),
                                   )
                                 : null,
                           ),
@@ -393,17 +394,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'Bem-vindo!',
                                 style: TextStyle(
                                   fontSize: 20,
-                                  color: Colors.white,
+                                  color: AppColors.of(context).text,
                                 ),
                               ),
                               Text(
                                 name,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: _muted),
+                                style: TextStyle(
+                                  color: AppColors.of(context).muted,
+                                ),
                               ),
                             ],
                           ),
@@ -447,11 +450,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       if (!_busy && _error == null) _reports(),
                     ],
                     const SizedBox(height: 32),
-                    const Text(
+                    Text(
                       'GHYDRO',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: _muted,
+                        color: AppColors.of(context).muted,
                         fontSize: 11,
                         letterSpacing: 2,
                       ),
@@ -464,8 +467,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        backgroundColor: _surface,
-        indicatorColor: _cyan.withValues(alpha: 0.18),
+        backgroundColor: AppColors.of(context).surface,
+        indicatorColor: AppColors.of(context).cyan.withValues(alpha: 0.18),
         selectedIndex: _tab,
         onDestinationSelected: (tab) => setState(() => _tab = tab),
         destinations: const [
@@ -490,13 +493,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _card(Widget child) => Container(
+  Widget _card(Widget child, {double padding = 22}) => Container(
     width: double.infinity,
-    padding: const EdgeInsets.all(22),
+    padding: EdgeInsets.all(padding),
     decoration: BoxDecoration(
-      color: _surface,
+      color: AppColors.of(context).surface,
       borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: const Color(0xFF393254)),
+      border: Border.all(color: AppColors.of(context).border),
     ),
     child: child,
   );
@@ -517,10 +520,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final ring = _card(
       Column(
         children: [
-          const Text(
+          Text(
             'MONITORAMENTO DE SENSORES',
             textAlign: TextAlign.center,
-            style: TextStyle(color: _muted, fontSize: 11, letterSpacing: 1.5),
+            style: TextStyle(
+              color: AppColors.of(context).muted,
+              fontSize: 11,
+              letterSpacing: 1.5,
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -531,6 +538,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 !sensorCountsAvailable || sensors.isEmpty
                     ? 0
                     : active / sensors.length,
+                trackColor: AppColors.of(context).border,
               ),
               child: Center(
                 child: Column(
@@ -538,30 +546,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Text(
                       sensorCountsAvailable ? '$active' : '--',
-                      style: const TextStyle(
-                        color: _green,
+                      style: TextStyle(
+                        color: AppColors.of(context).green,
                         fontSize: 46,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const Text(
+                    Text(
                       'Sensores ativos',
-                      style: TextStyle(color: _muted),
+                      style: TextStyle(color: AppColors.of(context).muted),
                     ),
                     Text(
                       sensorCountsAvailable
                           ? 'de ${sensors.length} cadastrados'
                           : 'Dados dos setores indisponíveis',
-                      style: const TextStyle(color: _cyan),
+                      style: TextStyle(color: AppColors.of(context).cyan),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-          const Text(
+          Text(
             'Dados registrados no servidor',
-            style: TextStyle(color: _muted, fontSize: 12),
+            style: TextStyle(color: AppColors.of(context).muted, fontSize: 12),
           ),
         ],
       ),
@@ -569,37 +577,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Início',
-          style: TextStyle(fontSize: 26, color: Colors.white),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Início',
+                style: TextStyle(
+                  fontSize: 26,
+                  color: AppColors.of(context).text,
+                ),
+              ),
+            ),
+            if (AppThemeScope.maybeOf(context) case final themeMode?)
+              _ThemeToggle(controller: themeMode),
+          ],
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Atualização automática a cada 60 segundos',
-          style: TextStyle(color: _muted),
+          style: TextStyle(color: AppColors.of(context).muted),
         ),
         const SizedBox(height: 16),
         if (rows('propriedade').isNotEmpty) ...[
-          DropdownButtonFormField<String>(
-            key: ValueKey(_selectedFarmId),
-            initialValue: _selectedFarmId,
-            decoration: const InputDecoration(
-              labelText: 'Fazenda',
-              border: OutlineInputBorder(),
+          Container(
+            padding: const EdgeInsets.all(1.5),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.of(context).green,
+                  AppColors.of(context).cyan,
+                  Color(0xFF6634CE),
+                ],
+              ),
             ),
-            isExpanded: true,
-            items: [
-              for (final farm in rows('propriedade'))
-                if (farm['id'] != null)
-                  DropdownMenuItem(
-                    value: farm['id'].toString(),
-                    child: Text(
-                      farm['nome']?.toString() ?? 'Fazenda',
-                      overflow: TextOverflow.ellipsis,
-                    ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.of(context).surface,
+                borderRadius: BorderRadius.circular(20.5),
+              ),
+              child: DropdownButtonFormField<String>(
+                key: ValueKey(_selectedFarmId),
+                initialValue: _selectedFarmId,
+                decoration: InputDecoration(
+                  labelText: 'Fazenda',
+                  labelStyle: TextStyle(color: AppColors.of(context).cyan),
+                  floatingLabelStyle: TextStyle(
+                    color: AppColors.of(context).cyan,
                   ),
-            ],
-            onChanged: _selectFarm,
+                  prefixIcon: Icon(
+                    Icons.agriculture_outlined,
+                    color: AppColors.of(context).green,
+                  ),
+                  contentPadding: EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                ),
+                iconEnabledColor: AppColors.of(context).cyan,
+                dropdownColor: AppColors.of(context).surface,
+                borderRadius: BorderRadius.circular(20),
+                isExpanded: true,
+                items: [
+                  for (final farm in rows('propriedade'))
+                    if (farm['id'] != null)
+                      DropdownMenuItem(
+                        value: farm['id'].toString(),
+                        child: Text(
+                          farm['nome']?.toString() ?? 'Fazenda',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                ],
+                onChanged: _selectFarm,
+              ),
+            ),
           ),
           const SizedBox(height: 16),
         ],
@@ -610,9 +662,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Monitoramento Geral — resumo de fazendas, setores, plantios e sensores',
-          style: TextStyle(color: _muted),
+          style: TextStyle(color: AppColors.of(context).muted),
         ),
         const SizedBox(height: 14),
         LayoutBuilder(
@@ -696,9 +748,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Comece pela sua fazenda',
-                  style: TextStyle(fontSize: 21, color: Colors.white),
+                  style: TextStyle(
+                    fontSize: 21,
+                    color: AppColors.of(context).text,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 const Text(
@@ -729,7 +784,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       width: width,
       height: square ? width : null,
       child: Card(
-        color: _surface,
+        color: AppColors.of(context).surface,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () => _open(resource(path)),
@@ -738,7 +793,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: _cyan, size: square ? 20 : 24),
+                Icon(
+                  icon,
+                  color: AppColors.of(context).cyan,
+                  size: square ? 20 : 24,
+                ),
                 SizedBox(height: square ? 6 : 12),
                 Text(
                   value,
@@ -751,7 +810,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   label,
                   maxLines: square ? 2 : null,
                   overflow: square ? TextOverflow.ellipsis : null,
-                  style: TextStyle(color: _muted, fontSize: square ? 12 : 14),
+                  style: TextStyle(
+                    color: AppColors.of(context).muted,
+                    fontSize: square ? 12 : 14,
+                  ),
                 ),
               ],
             ),
@@ -772,14 +834,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Gestão da fazenda',
-          style: TextStyle(fontSize: 26, color: Colors.white),
+          style: TextStyle(fontSize: 26, color: AppColors.of(context).text),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Tudo que você precisa acompanhar, em um só lugar.',
-          style: TextStyle(color: _muted),
+          style: TextStyle(color: AppColors.of(context).muted),
         ),
         const SizedBox(height: 20),
         TextField(
@@ -794,8 +856,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         for (final group in available.map((r) => r.group).toSet()) ...[
           Text(
             group.toUpperCase(),
-            style: const TextStyle(
-              color: _cyan,
+            style: TextStyle(
+              color: AppColors.of(context).cyan,
               fontSize: 12,
               letterSpacing: 1.5,
             ),
@@ -803,10 +865,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 12),
           for (final spec in available.where((r) => r.group == group))
             Card(
-              color: _surface,
+              color: AppColors.of(context).surface,
               margin: const EdgeInsets.only(bottom: 10),
               child: ListTile(
-                leading: Icon(spec.icon, color: _cyan),
+                leading: Icon(spec.icon, color: AppColors.of(context).cyan),
                 title: Text(spec.title),
                 subtitle: Text(spec.description),
                 trailing: const Icon(Icons.chevron_right),
@@ -820,81 +882,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _profile(String name, Uint8List? photo, VoidCallback choosePhoto) =>
-      _card(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Minha conta',
-              style: TextStyle(fontSize: 26, color: Colors.white),
-            ),
-            const SizedBox(height: 24),
-            Center(
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 48,
-                    backgroundColor: _surface,
-                    backgroundImage: photo == null ? null : MemoryImage(photo),
-                    child: photo == null
-                        ? Text(
-                            name.isEmpty
-                                ? 'G'
-                                : name.characters.first.toUpperCase(),
-                            style: const TextStyle(color: _cyan, fontSize: 30),
-                          )
-                        : null,
-                  ),
-                  TextButton.icon(
-                    onPressed: choosePhoto,
-                    icon: const Icon(Icons.photo_camera_outlined),
-                    label: Text(
-                      photo == null ? 'Adicionar foto' : 'Alterar foto',
-                    ),
-                  ),
-                  if (photo != null)
-                    TextButton(
-                      onPressed: _removeProfilePhoto,
-                      child: const Text('Remover foto'),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text('Nome', style: TextStyle(color: _muted)),
-            Text(name, style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 20),
-            const Text('E-mail', style: TextStyle(color: _muted)),
-            Text(widget.email),
-            const SizedBox(height: 20),
-            const Text('Perfil de acesso', style: TextStyle(color: _muted)),
-            Text(displayValue(widget.auth.profile?['role'])),
-            const SizedBox(height: 20),
-            const Text('CPF', style: TextStyle(color: _muted)),
-            Text(displayValue(widget.auth.profile?['cpf'])),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () async {
-                final changed = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(
-                    builder: (_) => _ProfileEditor(auth: widget.auth),
-                  ),
-                );
-                if (changed == true && mounted) setState(() {});
-              },
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Editar perfil'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => widget.onLogout(context),
-              icon: const Icon(Icons.logout),
-              label: const Text('Sair da conta'),
-            ),
-          ],
+  Widget _profile(
+    String name,
+    Uint8List? photo,
+    VoidCallback choosePhoto,
+  ) => _card(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Minha conta',
+          style: TextStyle(fontSize: 26, color: AppColors.of(context).text),
         ),
-      );
+        const SizedBox(height: 24),
+        Center(
+          child: Column(
+            children: [
+              CircleAvatar(
+                radius: 48,
+                backgroundColor: AppColors.of(context).surface,
+                backgroundImage: photo == null ? null : MemoryImage(photo),
+                child: photo == null
+                    ? Text(
+                        name.isEmpty
+                            ? 'G'
+                            : name.characters.first.toUpperCase(),
+                        style: TextStyle(
+                          color: AppColors.of(context).cyan,
+                          fontSize: 30,
+                        ),
+                      )
+                    : null,
+              ),
+              TextButton.icon(
+                onPressed: choosePhoto,
+                icon: const Icon(Icons.photo_camera_outlined),
+                label: Text(photo == null ? 'Adicionar foto' : 'Alterar foto'),
+              ),
+              if (photo != null)
+                TextButton(
+                  onPressed: _removeProfilePhoto,
+                  child: const Text('Remover foto'),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text('Nome', style: TextStyle(color: AppColors.of(context).muted)),
+        Text(name, style: const TextStyle(fontSize: 18)),
+        const SizedBox(height: 20),
+        Text('E-mail', style: TextStyle(color: AppColors.of(context).muted)),
+        Text(widget.email),
+        const SizedBox(height: 20),
+        Text(
+          'Perfil de acesso',
+          style: TextStyle(color: AppColors.of(context).muted),
+        ),
+        Text(displayValue(widget.auth.profile?['role'])),
+        const SizedBox(height: 20),
+        Text('CPF', style: TextStyle(color: AppColors.of(context).muted)),
+        Text(displayValue(widget.auth.profile?['cpf'])),
+        const SizedBox(height: 24),
+        FilledButton.icon(
+          onPressed: () async {
+            final changed = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => _ProfileEditor(auth: widget.auth),
+              ),
+            );
+            if (changed == true && mounted) setState(() {});
+          },
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Editar perfil'),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () => widget.onLogout(context),
+          icon: const Icon(Icons.logout),
+          label: const Text('Sair da conta'),
+        ),
+      ],
+    ),
+  );
   double? _durationHours(Map<String, dynamic> row) {
     final minutes = _recordedValue(row, 'duracaoMinutos');
     return minutes == null ? null : minutes / 60;
@@ -910,6 +979,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final present = values.whereType<double>();
     if (present.isEmpty) return null;
     return present.fold<double>(0, (sum, value) => sum + value);
+  }
+
+  double? _averageValues(Iterable<double?> values) {
+    final present = values.whereType<double>().toList();
+    if (present.isEmpty) return null;
+    return present.reduce((a, b) => a + b) / present.length;
   }
 
   String _shownValue(double? value) =>
@@ -933,14 +1008,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Relatórios',
-          style: TextStyle(fontSize: 26, color: Colors.white),
+          style: TextStyle(fontSize: 26, color: AppColors.of(context).text),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Irrigações da fazenda selecionada nos últimos 6 meses',
-          style: TextStyle(color: _muted),
+          style: TextStyle(color: AppColors.of(context).muted),
+        ),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              final farm = rows('propriedade')
+                  .where((row) => row['id']?.toString() == _selectedFarmId)
+                  .firstOrNull;
+              if (farm == null || _selectedFarmId == null) return;
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => IrrigationReportScreen(
+                    api: widget.auth.api,
+                    farmId: _selectedFarmId!,
+                    farmName: farm['nome']?.toString() ?? 'Fazenda',
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            label: const Text('Gerar relatório em PDF'),
+          ),
         ),
         const SizedBox(height: 20),
         if (executions.isEmpty) ...[
@@ -951,22 +1049,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 20),
         ],
-        _monthlyChart(
-          'Duração das irrigações (horas)',
-          executions,
-          _durationHours,
-        ),
-        const SizedBox(height: 20),
-        _monthlyChart(
-          'Volume de água estimado',
-          executions,
-          (row) => _recordedValue(row, 'volumeAgua'),
-        ),
-        const SizedBox(height: 20),
-        _monthlyChart(
-          'Energia estimada',
-          executions,
-          (row) => _recordedValue(row, 'consumoEnergia'),
+        Column(
+          children: [
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _monthlyChart(
+                      'Duração das irrigações (horas)',
+                      executions,
+                      _durationHours,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _monthlyChart(
+                      'Volume de água estimado',
+                      executions,
+                      (row) => _recordedValue(row, 'volumeAgua'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _monthlyChart(
+                      'Energia estimada',
+                      executions,
+                      (row) => _recordedValue(row, 'consumoEnergia'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: _monthlyCostChart(executions)),
+                ],
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 20),
         _card(
@@ -989,14 +1113,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Energia estimada: ${_shownValue(_totalValues(executions.map((row) => _recordedValue(row, 'consumoEnergia'))))}',
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Água e energia são estimativas calculadas pelo servidor a partir da configuração do equipamento.',
-                style: TextStyle(color: _muted),
+                style: TextStyle(color: AppColors.of(context).muted),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Os registros antigos de manejo podem ser consultados separadamente.',
-                style: TextStyle(color: _muted),
+                style: TextStyle(color: AppColors.of(context).muted),
               ),
               TextButton(
                 onPressed: () => _open(resource('execucaoManejo')),
@@ -1083,15 +1207,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               width: 30,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
-                                color: _cyan,
+                                color: AppColors.of(context).cyan,
                               ),
                             ),
                             const SizedBox(height: 8),
-                            Text(
-                              months[entry.$1.month - 1],
-                              style: const TextStyle(
-                                color: _muted,
-                                fontSize: 11,
+                            FittedBox(
+                              child: Text(
+                                months[entry.$1.month - 1],
+                                style: TextStyle(
+                                  color: AppColors.of(context).muted,
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           ],
@@ -1103,19 +1229,251 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             '— indica ausência de dados.',
-            style: TextStyle(color: _muted, fontSize: 11),
+            style: TextStyle(color: AppColors.of(context).muted, fontSize: 11),
           ),
         ],
+      ),
+      padding: 12,
+    );
+  }
+
+  Widget _monthlyCostChart(List<Map<String, dynamic>> executions) {
+    const months = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez',
+    ];
+    final now = DateTime.now();
+    final monthly = List.generate(6, (index) {
+      final month = DateTime(now.year, now.month - 5 + index);
+      final rows = executions.where((row) {
+        final date = DateTime.tryParse(row['dataIrrigacao']?.toString() ?? '');
+        return date?.year == month.year && date?.month == month.month;
+      });
+      return (
+        month,
+        _averageValues(rows.map((row) => _recordedValue(row, 'custoAgua'))),
+        _averageValues(rows.map((row) => _recordedValue(row, 'custoEnergia'))),
+      );
+    });
+    final maximum = monthly.fold<double>(
+      0,
+      (max, entry) => math.max(max, math.max(entry.$2 ?? 0, entry.$3 ?? 0)),
+    );
+    final waterColor = AppColors.of(context).cyan;
+    final energyColor = AppColors.of(context).green;
+    return _card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Gasto médio por irrigação',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 4,
+            children: [
+              _chartLegend('Água', waterColor),
+              _chartLegend('Energia', energyColor),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 200,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (final entry in monthly)
+                  Expanded(
+                    child: Semantics(
+                      excludeSemantics: true,
+                      label:
+                          '${months[entry.$1.month - 1]}: água ${_shownValue(entry.$2)}, energia ${_shownValue(entry.$3)}',
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: _costBar(entry.$2, maximum, waterColor),
+                              ),
+                              const SizedBox(width: 1),
+                              Expanded(
+                                child: _costBar(entry.$3, maximum, energyColor),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          FittedBox(
+                            child: Text(
+                              months[entry.$1.month - 1],
+                              style: TextStyle(
+                                color: AppColors.of(context).muted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Média mensal dos custos informados por irrigação. — indica ausência de dados. A moeda não acompanha os registros; pressupõe-se a mesma moeda.',
+            style: TextStyle(color: AppColors.of(context).muted, fontSize: 11),
+          ),
+        ],
+      ),
+      padding: 12,
+    );
+  }
+
+  Widget _chartLegend(String label, Color color) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 4),
+      Text(label, style: const TextStyle(fontSize: 11)),
+    ],
+  );
+
+  Widget _costBar(double? value, double maximum, Color color) => Column(
+    mainAxisAlignment: MainAxisAlignment.end,
+    children: [
+      FittedBox(
+        child: Text(
+          value == null ? '—' : _number(value),
+          style: const TextStyle(fontSize: 10),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Container(
+        width: 12,
+        height: maximum == 0 || value == null
+            ? 2
+            : math.max(2, 140 * value / maximum),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(5),
+        ),
+      ),
+    ],
+  );
+}
+
+class _ThemeToggle extends StatelessWidget {
+  const _ThemeToggle({required this.controller});
+  final ValueNotifier<ThemeMode> controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final light = controller.value == ThemeMode.light;
+    final action = light ? 'Ativar modo escuro' : 'Ativar modo claro';
+    void toggle() =>
+        controller.value = light ? ThemeMode.dark : ThemeMode.light;
+
+    return Semantics(
+      label: 'Tema do aplicativo',
+      value: light ? 'Modo claro' : 'Modo escuro',
+      toggled: light,
+      onTap: toggle,
+      onTapHint: action,
+      child: ExcludeSemantics(
+        child: Tooltip(
+          message: action,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: toggle,
+              child: SizedBox(
+                width: 92,
+                height: 48,
+                child: Center(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 88,
+                    height: 40,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: light
+                          ? const Color.fromARGB(255, 6, 200, 48)
+                          : const Color.fromARGB(255, 10, 3, 85),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Stack(
+                      children: [
+                        Align(
+                          alignment: light
+                              ? Alignment.centerLeft
+                              : Alignment.centerRight,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Icon(
+                              light
+                                  ? Icons.light_mode_rounded
+                                  : Icons.dark_mode_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                        AnimatedAlign(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                          alignment: light
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(color: Colors.black26, blurRadius: 3),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
 class _ActivityRing extends CustomPainter {
-  _ActivityRing(this.fraction);
+  _ActivityRing(this.fraction, {required this.trackColor});
   final double fraction;
+  final Color trackColor;
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromCircle(
@@ -1126,24 +1484,31 @@ class _ActivityRing extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 20
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      rect,
-      0,
-      math.pi * 2,
-      false,
-      paint..color = const Color(0xFF393254),
-    );
+    canvas.drawArc(rect, 0, math.pi * 2, false, paint..color = trackColor);
     if (fraction > 0) {
+      paint.color = Colors.white;
       paint.shader = const SweepGradient(
-        colors: [_green, _cyan, Color(0xFF6634CE), _green],
+        colors: [
+          Color(0xFF65D99A),
+          Color(0xFF36C9D8),
+          Color(0xFF6634CE),
+          Color(0xFF65D99A),
+        ],
+        transform: GradientRotation(-math.pi / 2),
       ).createShader(rect);
-      canvas.drawArc(rect, -math.pi / 2, math.pi * 2 * fraction, false, paint);
+      canvas.drawArc(
+        rect,
+        -math.pi / 2,
+        math.pi * 2 * fraction.clamp(0.0, 1.0),
+        false,
+        paint,
+      );
     }
   }
 
   @override
   bool shouldRepaint(_ActivityRing oldDelegate) =>
-      fraction != oldDelegate.fraction;
+      fraction != oldDelegate.fraction || trackColor != oldDelegate.trackColor;
 }
 
 class _ProfileEditor extends StatefulWidget {
@@ -1219,7 +1584,9 @@ class _ProfileEditorState extends State<_ProfileEditor> {
                 if (_error != null)
                   Text(
                     _error!,
-                    style: const TextStyle(color: Color(0xFFFFB4AB)),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 FilledButton(
                   onPressed: _saving ? null : _save,
